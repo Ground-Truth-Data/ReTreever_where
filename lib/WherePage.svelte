@@ -1,9 +1,9 @@
 <script lang="ts">
 import type { Feature } from "geojson";
 import WhereMap from "./WhereMap.svelte";
-import MapDrawControls from "$harness/components/map/getCache_OnlineMap/lib/mapDrawControls.svelte";
-import { safeEase } from "$harness/components/map/mapShared/safeEase";
-import { safeFitBounds } from "$harness/components/map/mapShared/safeMap";
+import MapDrawControls from "$harness/getCache_OnlineMap/lib/mapDrawControls.svelte";
+import { safeEase } from "./safeEase";
+import { safeFitBounds } from "./safeMap";
 import {
 	formatTransparencyScore,
 	type FavouriteLocation,
@@ -18,6 +18,20 @@ import inputBarRaw from "./whereAssets/around-me-input-bar.svg?raw";
 import favouritesBoxRaw from "./whereAssets/favourites-box.svg?raw";
 import closeRaw from "./whereAssets/close-button.svg?raw";
 import photoFrameRaw from "./whereAssets/around-me-photo-frame.svg?raw";
+
+// ---- BITMAP ART ---------------------------------------------------
+// Imported, never requested from the host at "/pub-Rtvr/...". An import
+// is resolved by the bundler at build time and the bytes are copied into
+// whatever app builds this child; a leading-slash URL is resolved by the
+// BROWSER against whatever server answers, so it only ever worked under
+// the one host whose static/ folder happened to hold these files.
+import markerUrl from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg";
+import toolLine from "./assets/pub-Rtvr/where/tool-line.webp";
+import toolPolygon from "./assets/pub-Rtvr/where/tool-polygon.webp";
+import toolTrash from "./assets/pub-Rtvr/where/tool-trash.webp";
+import toolAroundMe from "./assets/pub-Rtvr/where/tool-around-me.webp";
+import toolFavourites from "./assets/pub-Rtvr/where/tool-favourites.webp";
+import aroundMePhoto from "./assets/pub-Rtvr/where/around-me-photo.webp";
 
 /**
  * Page chrome for /retreeve/where, per Maps_Search_Layout_reference.png +
@@ -39,6 +53,7 @@ let {
 	ontogglefavourite,
 	routes = {},
 	ensureMapboxGuards = async () => {},
+	polygonsUrl = "/polygons",
 }: {
 	initialFeatures?: Feature[];
 	/** Fired with each finished drawing; the route persists it. */
@@ -54,9 +69,25 @@ let {
 	routes?: WhereRoutes;
 	/** Passed straight through to WhereMap — see its prop docs. */
 	ensureMapboxGuards?: () => Promise<void>;
+	/** Passed straight through to WhereMap — see its prop docs. */
+	polygonsUrl?: string;
 	/** Fired by the ★ in the marker box; the route owns the stored list. */
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 } = $props();
+
+/**
+ * The photo-frame SVG embeds a bitmap via <image href="…">, and it is injected
+ * with {@html} — so unlike every other asset on this page the bundler never
+ * parses that href and cannot rewrite it. The other raw SVGs here are pure
+ * vector and need no such fix-up; this is the only one carrying a bitmap.
+ * Rewriting the placeholder path in the raw text is what makes the frame's
+ * photo travel with the child instead of being fetched from the host. Both
+ * `href` and the legacy `xlink:href` carry it, hence the global replace.
+ */
+const photoFrameSvg = photoFrameRaw.replaceAll(
+	"/pub-Rtvr/where/around-me-photo.webp",
+	aroundMePhoto,
+);
 
 let map: import("mapbox-gl").Map | null = $state(null);
 let selectedFeature: any = $state(null);
@@ -331,9 +362,10 @@ let orgHref = $derived(
 		bind:map
 		bind:selectedFeature
 		bind:viewChanged
-		markerUrl="/pub-Rtvr/map-marker-tailWag-ReTreever.svg"
+		{markerUrl}
 		{userLocation}
 		{ensureMapboxGuards}
+		{polygonsUrl}
 	/>
 
 	<!-- Draw engine: sources + in-progress popover only; the tool panel
@@ -366,7 +398,7 @@ let orgHref = $derived(
 				class:tool-active={drawIntent === "line"}
 				onclick={() => pickDrawTool("line")}
 			>
-				<img src="/pub-Rtvr/where/tool-line.webp" alt="" />
+				<img src={toolLine} alt="" />
 				<span class="tool-tip">Draw a line</span>
 			</button>
 			<button
@@ -375,11 +407,11 @@ let orgHref = $derived(
 				class:tool-active={drawIntent === "polygon"}
 				onclick={() => pickDrawTool("polygon")}
 			>
-				<img src="/pub-Rtvr/where/tool-polygon.webp" alt="" />
+				<img src={toolPolygon} alt="" />
 				<span class="tool-tip">Draw a polygon</span>
 			</button>
 			<button type="button" class="tool-btn" onclick={trashDrawings}>
-				<img src="/pub-Rtvr/where/tool-trash.webp" alt="" />
+				<img src={toolTrash} alt="" />
 				<span class="tool-tip">Clear drawn shapes</span>
 			</button>
 			<button
@@ -388,7 +420,7 @@ let orgHref = $derived(
 				class:tool-active={aroundMeOpen}
 				onclick={toggleAroundMe}
 			>
-				<img src="/pub-Rtvr/where/tool-around-me.webp" alt="" />
+				<img src={toolAroundMe} alt="" />
 				<span class="tool-tip">Around Me</span>
 			</button>
 			<button
@@ -397,7 +429,7 @@ let orgHref = $derived(
 				class:tool-active={favouritesOpen}
 				onclick={toggleFavouritesPanel}
 			>
-				<img src="/pub-Rtvr/where/tool-favourites.webp" alt="" />
+				<img src={toolFavourites} alt="" />
 				<span class="tool-tip">Favourited locations</span>
 			</button>
 		</div>
@@ -437,7 +469,7 @@ let orgHref = $derived(
 					</button>
 					<div class="around-photo" aria-hidden="true">
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html photoFrameRaw}
+						{@html photoFrameSvg}
 					</div>
 					<p class="around-prompt">
 						ReTreever's 'Around Me' function is most efficient with location
