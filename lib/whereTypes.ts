@@ -21,7 +21,7 @@ export type FavouriteLocation = {
 };
 
 /** Where the marker box can send you. The host fills these in; a child running
- *  on the harness has nowhere to go, so every entry is optional. */
+ *  on rapper has nowhere to go, so every entry is optional. */
 export type WhereRoutes = {
 	what?: string;
 	whatProject?: (key: string) => string;

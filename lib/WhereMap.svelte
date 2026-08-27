@@ -17,9 +17,9 @@ import {
 
 /**
  * Map-engine wiring for /retreeve/where — the land-variant subset of what
- * the harness's mapPage.svelte does, kept route-local because this page replaces
+ * rapper's mapPage.svelte does, kept route-local because this page replaces
  * ALL of mapPage's chrome (nav buttons, drawer, info panel) with the
- * designed ReTreever chrome in WherePage.svelte. the harness stays the engine
+ * designed ReTreever chrome in WherePage.svelte. rapper stays the engine
  * (mapInit, safeEase, draw sources); this file is just the glue: init,
  * marker-select → URL param, ?land=/?projectName= deep-link prefetch.
  */
@@ -52,7 +52,7 @@ let {
 	/**
 	 * Awaited before the map is built. ReTreever passes its memoized installer
 	 * (the NaN prototype guards must patch mapbox BEFORE the first `new Map`);
-	 * the harness passes nothing and the default no-op runs. A child cannot
+	 * rapper passes nothing and the default no-op runs. A child cannot
 	 * import the host's boot machinery, and should not need to know it exists.
 	 */
 	ensureMapboxGuards?: () => Promise<void>;
@@ -245,7 +245,7 @@ $effect(() => {
 
 // Block browser page zoom from trackpad pinch gestures (ctrlKey wheel +
 // Safari gesture events) — without this, pinching over the overlays zooms
-// the whole page instead of the map. Same guard as the harness's mapPage.
+// the whole page instead of the map. Same guard as rapper's mapPage.
 function blockBrowserZoom() {
 	const blockWheel = (e: WheelEvent) => {
 		if (e.ctrlKey) e.preventDefault();

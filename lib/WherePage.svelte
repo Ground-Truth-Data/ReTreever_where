@@ -41,7 +41,7 @@ import aroundMePhoto from "./assets/pub-Rtvr/where/around-me-photo.webp";
  * transparency box and the tree↔leaf fullscreen toggle. (A "Powered by harness"
  * badge used to sit bottom-right; it was removed — that corner belongs to
  * mapbox's required attribution, which the badge was crowding.)
- * The map engine + draw engine stay in the harness; anything that
+ * The map engine + draw engine stay in rapper; anything that
  * reaches outside the page (drawn-feature and favourites persistence)
  * arrives as a prop so +page.svelte keeps ownership of it.
  */
@@ -63,7 +63,7 @@ let {
 	favourites?: FavouriteLocation[];
 	/**
 	 * Where the marker box links to. ReTreever passes its AppRoutes; the
-	 * harness passes nothing, and the links simply do not render. A child
+	 * rapper passes nothing, and the links simply do not render. A child
 	 * cannot know the host's URL map — that is the host's to own.
 	 */
 	routes?: WhereRoutes;

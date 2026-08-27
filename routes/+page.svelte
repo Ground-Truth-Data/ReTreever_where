@@ -1,6 +1,6 @@
 <script lang="ts">
 /**
- * The child's OWN demo page — the harness mounts this at /where.
+ * The child's OWN demo page — rapper mounts this at /where.
  *
  * ReTreever has its own mount at src/routes/(retreever)/where/, which passes
  * the real localStorage persistence, its AppRoutes and the mapbox guards. This
