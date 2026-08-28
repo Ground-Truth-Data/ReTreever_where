@@ -14,7 +14,7 @@
  * /where/debug route passing the same localStorage-backed props the real
  * /where page uses. When omitted, the session-only fixture below stands: the
  * honest answer a checkout with no host gives. Same `?? fixture` pattern as
- * getCache_OfflineMap's demo/+page.svelte `hostPorts` prop.
+ * getCache_OfflineMap's OfflineMapPage.svelte `hostPorts` prop.
  */
 import WherePage from "../lib/WherePage.svelte";
 import type { FavouriteLocation, WhereRoutes } from "../lib/whereTypes";
