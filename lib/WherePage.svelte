@@ -246,6 +246,16 @@ async function searchArea(event: SubmitEvent) {
 	try {
 		// Same token the map itself boots with (mapInit.ts).
 		const token = import.meta.env.VITE_MAPBOX_TOKEN;
+		// NAME THE VARIABLE RATHER THAN INTERPOLATING `undefined`.
+		// Unset, this built `...&access_token=undefined`, Mapbox answered 401,
+		// and the catch below reported "Search failed — try again" — which
+		// describes a network blip, not a missing configuration value, and
+		// sends you looking in entirely the wrong place.
+		if (!token) {
+			aroundMeStatus =
+				"VITE_MAPBOX_TOKEN is not set — add it to rapper/.env and restart.";
+			return;
+		}
 		const url =
 			`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
 			`?types=region,district,place,country&limit=1&access_token=${token}`;
