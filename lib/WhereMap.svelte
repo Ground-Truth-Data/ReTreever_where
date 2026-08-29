@@ -15,14 +15,7 @@ import {
 	type Coord,
 } from "./coord";
 
-/**
- * Map-engine wiring for /retreeve/where — the land-variant subset of what
- * rapper's mapPage.svelte does, kept route-local because this page replaces
- * ALL of mapPage's chrome (nav buttons, drawer, info panel) with the
- * designed ReTreever chrome in WherePage.svelte. rapper stays the engine
- * (mapInit, safeEase, draw sources); this file is just the glue: init,
- * marker-select → URL param, ?land=/?projectName= deep-link prefetch.
- */
+// Map-engine wiring for /retreeve/where — rapper stays the engine (mapInit, safeEase, draw sources); this file is just the glue.
 let {
 	map = $bindable(null),
 	selectedFeature = $bindable(null),
@@ -37,24 +30,11 @@ let {
 	/** True once the camera has left the home globe view — drives the reset button. */
 	viewChanged?: boolean;
 	markerUrl?: string;
-	/**
-	 * Full URL returning polygon GeoJSON — supplied by the CONSUMER.
-	 * Was `${apiBase}/api/where/polygons`: ReTreever's own route name baked into
-	 * a publishable child. Same injection pattern as ensureMapboxGuards below —
-	 * the child states what it NEEDS, the host says where it lives. The default
-	 * stays same-origin relative, which is what the comment in onMount already
-	 * argued for; only the ROUTE NAME moved out. See RULE 7 in
-	 * childBoundary.test.ts.
-	 */
+	/** Full URL returning polygon GeoJSON — supplied by the CONSUMER. */
 	polygonsUrl?: string;
 	/** [lng, lat] of the visitor, once they've allowed location. Draws the dot. */
 	userLocation?: [number, number] | null;
-	/**
-	 * Awaited before the map is built. ReTreever passes its memoized installer
-	 * (the NaN prototype guards must patch mapbox BEFORE the first `new Map`);
-	 * rapper passes nothing and the default no-op runs. A child cannot
-	 * import the host's boot machinery, and should not need to know it exists.
-	 */
+	/** Awaited before the map is built — must patch mapbox's prototypes before the first `new Map`. */
 	ensureMapboxGuards?: () => Promise<void>;
 } = $props();
 
@@ -63,10 +43,6 @@ let splashVisible = $state(true);
 // Deep-link target may resolve before or after the map — coordinate.
 let pendingFeature: any = null;
 
-// ── Home camera ──────────────────────────────────────────────────────────
-// What "reset" returns to: the globe the page boots with. The numbers live
-// here rather than in WherePage because this file owns the init options they
-// come from — fullMapOptions for desktop, the mobile override below.
 const HOME_CENTER: [number, number] = fullMapOptions.initialCenter ?? [
 	defaultOptions.initialCenter[0],
 	defaultOptions.initialCenter[1],
@@ -79,9 +55,7 @@ const SPIN_MAX_ZOOM = 4;
 
 function flyToAndSelect(m: import("mapbox-gl").Map, feature: any) {
 	selectedFeature = feature;
-	// centroid may be a parsed object or a JSON string (Mapbox serializes
-	// feature properties). toCoordFromArray rejects NaN/out-of-range here so
-	// safeEase never sees a bad value.
+	// centroid may be a parsed object or a JSON string; toCoordFromArray guards against NaN/out-of-range values.
 	let raw: unknown = null;
 	if (feature?.geometry?.coordinates) {
 		raw = feature.geometry.coordinates;
@@ -99,14 +73,7 @@ function flyToAndSelect(m: import("mapbox-gl").Map, feature: any) {
 	}
 }
 
-// ── Reset ────────────────────────────────────────────────────────────────
-
-/**
- * Whether the camera has left home. Deliberately ignores the CENTRE: auto
- * rotation walks longitude continuously at home zoom, so comparing centres
- * would read "changed" a frame after load and never read anything else.
- * Zoom / bearing / pitch are the ones that mean "the user navigated in".
- */
+/** Ignores centre deliberately — home-zoom auto-rotation would make it read "changed" every frame; zoom/bearing/pitch are what actually mean the user navigated. */
 function syncViewChanged() {
 	const m = map;
 	if (!m) return;
@@ -116,17 +83,12 @@ function syncViewChanged() {
 		m.getPitch() !== 0;
 }
 
-/**
- * Put the map back the way it loaded: home globe, north up, nothing selected,
- * no deep-link in the URL. Exported for WherePage's reset button — the chrome
- * lives there, the camera knowledge lives here.
- */
+// Resets to home globe, north up, nothing selected, no deep-link in URL.
 export function resetView() {
 	selectedFeature = null;
 	pendingFeature = null;
 
-	// Drop ?land= / ?projectName= first. Leaving them would re-fly to the
-	// polygon we just left on the next refresh — a reset that doesn't reset.
+	// Drop ?land=/?projectName= first — leaving them re-flies to the old polygon on refresh.
 	const url = new URL($page.url);
 	url.searchParams.delete("land");
 	url.searchParams.delete("projectName");
@@ -138,37 +100,25 @@ export function resetView() {
 	const m = map;
 	if (!m) return;
 
-	// Bearing/pitch snap BEFORE the ease: safeEase only interpolates centre
-	// and zoom, and a jumpTo landing mid-ease would fight its per-frame one.
+	// Bearing/pitch snap BEFORE the ease — a mid-ease jumpTo would fight safeEase's per-frame one.
 	if (m.getBearing() !== 0 || m.getPitch() !== 0) {
 		safeJumpTo(m, { bearing: 0, pitch: 0 });
 	}
 	safeEase(m, { center: HOME_CENTER, zoom: homeZoom, duration: 1600 });
 
-	// The camera hash is only written at zoom ≥ 4 and never cleared on the way
-	// back out, so the goto above can't strip it — the ease's own moveends
-	// would rewrite it anyway while zoom is still high. Wait for the first
-	// moveend below the spin threshold, then clear it, so a refresh after a
-	// reset starts at the globe rather than back at the polygon.
+	// Hash is only cleared once zoom drops below the spin threshold — clearing earlier gets rewritten by the ease's own moveends.
 	const stripHash = () => {
 		if (m.getZoom() >= SPIN_MAX_ZOOM) return;
 		m.off("moveend", stripHash);
 		if (window.location.hash) {
-			// Through the router — a raw history.replaceState desyncs
-			// SvelteKit's history index and it warns about exactly this.
+			// Through the router — a raw history.replaceState desyncs SvelteKit's history index.
 			replaceState(window.location.pathname + window.location.search, {});
 		}
 	};
 	m.on("moveend", stripHash);
 }
 
-// ── The blue dot ─────────────────────────────────────────────────────────
-// The classic "you are here" puck: a translucent halo, a solid blue core and
-// a white ring, drawn as real Mapbox circle layers rather than a DOM marker
-// so it sits IN the map — correct at every zoom, and it doesn't drift during
-// the ease. Three layers because that's what reads as the familiar dot: the
-// halo gives it presence at globe zoom, the ring separates the core from
-// dark satellite imagery.
+// User-location dot: three Mapbox circle layers (halo/ring/core), not a DOM marker, so it doesn't drift during the ease.
 const USER_DOT_SOURCE = "rt-user-location";
 
 function pointFeature(coords: [number, number]) {
@@ -189,12 +139,10 @@ $effect(() => {
 	const loc = userLocation;
 	if (!m || !loc) return;
 
-	// The style has to be loaded before addSource/addLayer, and a style swap
-	// wipes both — so draw on `styledata` too, not just once.
+	// Style must be loaded before addSource/addLayer, and a style swap wipes both — redraw on `styledata` too.
 	function draw() {
 		if (!m || !loc) return;
-		// Plain JSON only across the Mapbox boundary — a $state proxy corrupts
-		// the GL worker transfer (see the "no $state proxies" memory).
+		// Plain JSON only across the Mapbox boundary — a $state proxy corrupts the GL worker transfer.
 		const data = pointFeature([loc[0], loc[1]]);
 		const existing = m.getSource(USER_DOT_SOURCE) as
 			| import("mapbox-gl").GeoJSONSource
@@ -243,9 +191,7 @@ $effect(() => {
 	};
 });
 
-// Block browser page zoom from trackpad pinch gestures (ctrlKey wheel +
-// Safari gesture events) — without this, pinching over the overlays zooms
-// the whole page instead of the map. Same guard as rapper's mapPage.
+// Blocks trackpad-pinch page zoom (ctrlKey wheel + Safari gesture events) — without this, pinching zooms the whole page instead of the map.
 function blockBrowserZoom() {
 	const blockWheel = (e: WheelEvent) => {
 		if (e.ctrlKey) e.preventDefault();
@@ -276,23 +222,11 @@ onMount(() => {
 	const cleanupZoomBlock = blockBrowserZoom();
 
 	void (async () => {
-		// Guards must patch mapbox's prototypes before the map is built —
-		// they used to be installed eagerly at client boot (see
-		// ensureMapboxGuards / perf/BASELINE.md).
+		// Guards must patch mapbox's prototypes before the map is built.
 		await ensureMapboxGuards();
 		if (disposed) return;
 
-		// SAME-ORIGIN, deliberately empty. This was PUBLIC_API_URL, which both
-		// .env files pin to `http://localhost:5173` — an address that stopped
-		// serving anything when bare localhost stopped being a site (ac3225dc).
-		// So this page, loaded correctly on retreever.localhost, fetched back
-		// out to a host the boundary refuses and 404'd on its own data.
-		//
-		// `/api` is a SHARED path, so a relative URL resolves on whatever host
-		// the page is on — right in dev, in prod, and on all three site names,
-		// with no env var that has to be correct in four places. Safe here
-		// because /where is a (retreever) route: dt-web only, never Capacitor,
-		// where a relative fetch would have no server to reach.
+		// Deliberately same-origin/relative — an absolute PUBLIC_API_URL host breaks on retreever.localhost (see ac3225dc); safe only because /where is dt-web-only, never Capacitor.
 		const landParam = $page.url.searchParams.get("land");
 		const projectNameParam = $page.url.searchParams.get("projectName");
 		const hasTarget = !!(landParam || projectNameParam);
@@ -300,11 +234,9 @@ onMount(() => {
 		fullMapOptions.autoRotate = !hasTarget;
 		// Live "z3.4" in the bottom-right corner — debug aid.
 		fullMapOptions.showZoomReadout = true;
-		// Attribution line bottom-LEFT, mapbox wordmark bottom-RIGHT where it
-		// joins the zoom readout inside the gold border's corner cutout.
+		// Attribution bottom-LEFT; mapbox wordmark bottom-RIGHT, joining the zoom readout in the gold border's corner cutout.
 		fullMapOptions.creditsSplit = true;
-		// Scale bar stays bottom-LEFT (mapbox's default) with the wordmark.
-		// The right corner holds only the zoom readout.
+		// Scale bar stays bottom-LEFT (mapbox default) with the wordmark; the right corner holds only the zoom readout.
 
 		const isMobile = window.innerWidth < 768;
 		if (isMobile) homeZoom = MOBILE_HOME_ZOOM;
@@ -312,14 +244,7 @@ onMount(() => {
 		const handleFeatureSelect = (feature: any) => {
 			selectedFeature = feature;
 			if (feature?.landKey) {
-				// `/where`, NOT `/retreeve/where`. ReTreever's pages moved to the top
-				// level; /retreeve/where no longer exists as a route, it only
-				// survives as a legacy 301 in hooks.server.ts. That made every land
-				// click a FULL PAGE LOAD: the client router cannot resolve a path
-				// that is not in its manifest, so it handed off to the browser, the
-				// server 301'd to /where, and the whole page reloaded — bundle
-				// re-parse, Mapbox re-init, tiles and polygons re-fetched. That was
-				// the click lag. Same-route navigation keeps it client-side.
+				// Must be `/where`, not `/retreeve/where` (no longer a route) — the latter forces a full page reload instead of client-side nav.
 				goto(`/where?land=${encodeURIComponent(feature.landKey)}`, {
 					replaceState: true,
 					noScroll: true,
@@ -347,9 +272,7 @@ onMount(() => {
 				setTimeout(() => {
 					splashVisible = false;
 				}, 3000);
-				// moveend fires per frame during the rAF spin and during
-				// safeEase's jumpTo loop; syncViewChanged only writes a
-				// boolean, so a same-value write costs nothing.
+				// moveend fires every frame during rAF spin/safeEase; syncViewChanged only writes a boolean, so this is cheap.
 				m.on("moveend", syncViewChanged);
 				syncViewChanged();
 				if (pendingFeature) {
@@ -406,8 +329,7 @@ onMount(() => {
 <div bind:this={mapContainer} class="where-mapbox"></div>
 
 {#if splashVisible}
-	<!-- Placeholder orbs so users don't stare at a dark globe while the map
-	     style + centroids load. Fades out on first map idle. -->
+	<!-- Placeholder orbs so users don't stare at a dark globe while the map loads; fades out on first idle. -->
 	<div class="map-splash" aria-hidden="true">
 		<span class="orb orb-a"></span>
 		<span class="orb orb-b"></span>
@@ -418,25 +340,9 @@ onMount(() => {
 {/if}
 
 <style>
-	/* ── Map corner controls ────────────────────────────────────────────
-	   TWO CORNERS, ONE JOB EACH:
+	/* CSS can only style the container a control already lives in — corner placement is fixed by Mapbox at construction (see `creditsSplit` in mapInit.ts), not by CSS padding. */
 
-	     bottom-LEFT   the attribution line, above the scale bar
-	     bottom-RIGHT  the mapbox wordmark + zoom readout, sitting DOWN IN
-	                   the gold border's corner cutout
-
-	   WHICH CORNER EACH CONTROL IS IN IS NOT DECIDED HERE. Mapbox places
-	   the wordmark and the attribution once, at map construction, into two
-	   different DOM containers; see `creditsSplit` in mapInit.ts. CSS can
-	   only style/offset the container a control already lives in — which is
-	   why earlier attempts to "move the text left" by changing padding
-	   moved the whole cluster instead of separating it.
-
-	   Both containers sit BELOW the gold border (z-index 10) so the yellow
-	   line draws over them rather than being punched through. */
-
-	/* Bottom-LEFT: attribution on top, scale bar under it, clear of the
-	   border's flat bottom edge. */
+	/* Bottom-LEFT: attribution on top, scale bar under it, clear of the border's flat bottom edge. */
 	:global(.mapboxgl-ctrl-bottom-left) {
 		z-index: 2;
 		display: flex;
@@ -446,31 +352,10 @@ onMount(() => {
 		padding: 0 0 26px 22px;
 	}
 
-	/* Bottom-RIGHT: the corner cutout.
-	   THESE OFFSETS ARE READ OFF THE BORDER SVG, not judged by eye.
-	   `gold-border.svg` is preserveAspectRatio="none", so its viewBox maps
-	   to the stage as straight percentages and the notch sits at the same
-	   fractions at every window size. Its bottom-right path gives:
-
-	     notch top edge      y = 91.8% of stage height
-	     diagonal step       x = 89.2% → 91.1% of stage width
-
-	   So the pocket is the strip BELOW 91.8% height and LEFT of ~89% width.
-	   Anchoring the column to the bottom-right of that pocket is what puts
-	   the wordmark and readout down IN the cutout instead of floating above
-	   it. Percentages, not px, so they track the border as the stage
-	   resizes. */
+	/* Bottom-right offsets are read off gold-border.svg's geometry (notch: y=91.8%, x=89.2%→91.1%), not judged by eye — percentages track the border as the stage resizes. */
 	:global(.mapboxgl-ctrl-bottom-right) {
 		display: flex;
-		/* A COLUMN: readout ON TOP OF the wordmark, right-aligned.
-		   The stack is taller than the cutout's flat floor (~50px against
-		   ~63px), so the readout necessarily rises ABOVE the notch's top
-		   edge. That is fine and is the point: right of the diagonal the
-		   gold line runs along the TOP of the cutout with open map above it,
-		   so the readout sits clear of the border rather than under it. The
-		   constraint that still binds is HORIZONTAL — both boxes must stay
-		   right of the vertical gold wall at ~89.1% of the stage width,
-		   which the cqw sizing below maintains at every window size. */
+		/* Column: readout above wordmark; both must stay right of the gold wall at ~89.1% of stage width — cqw sizing below maintains that at every size. */
 		flex-direction: column;
 		align-items: flex-end;
 		justify-content: flex-end;
@@ -479,14 +364,7 @@ onMount(() => {
 		padding: 0 0.9% 1.1% 0;
 	}
 
-	/* THE POCKET IS A PERCENTAGE, SO ITS CONTENTS MUST BE TOO.
-	   The cutout is ~10.9% of the stage width (100% − 89.1%), which is
-	   ~150px at a 1400px stage but only ~110px at 1024. Sized in fixed px
-	   the two boxes stayed ~165px wide and the readout slid out under the
-	   gold line on smaller windows — it fit at 1400+ and broke below.
-	   Sizing them in `cqw` against the stage keeps the pair proportional to
-	   the pocket at every width, with a px floor so the text stays legible.
-	   `.where-stage` is the container being measured (see WherePage). */
+	/* Sized in `cqw` (not px) against `.where-stage` — fixed px caused the readout to slide out under the gold line on windows narrower than ~1400px. */
 	:global(.mapboxgl-ctrl-bottom-right .rt-zoom-readout) {
 		padding: 3px max(4px, 0.35cqw);
 		font-size: max(9px, 0.78cqw);
@@ -499,20 +377,13 @@ onMount(() => {
 		padding: 3px max(4px, 0.35cqw);
 	}
 
-	/* Margins zeroed at TWO classes of specificity: mapbox ships
-	   `.mapboxgl-ctrl { margin: 10px }`, a single class — exactly as
-	   specific as ours alone, so it wins or loses on source order, which we
-	   do not control. Chaining both classes outranks it outright. The flex
-	   `gap` owns the spacing now, so these margins must be gone or they
-	   fight it. */
+	/* Margins zeroed via chained selectors to outrank mapbox's same-specificity `.mapboxgl-ctrl { margin: 10px }` — flex `gap` owns spacing now. */
 	:global(.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl),
 	:global(.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl) {
 		margin: 0;
 	}
 
-	/* Attribution — same bordered treatment as the readout and the scale so
-	   the credits read as one family. Left un-styled it is bare white text
-	   on the map, which vanishes over bright satellite. */
+	/* Attribution styled to match the readout/scale — left plain it's white text that vanishes over bright satellite imagery. */
 	:global(.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl-attrib) {
 		background-color: rgba(0, 0, 0, 0.72);
 		border: 1px solid rgba(255, 255, 255, 0.55);
@@ -527,33 +398,12 @@ onMount(() => {
 		color: rgba(255, 255, 255, 0.86);
 	}
 
-	/* THE WORDMARK'S WRAPPER IS HIDDEN BY AN INLINE STYLE.
-	   Mapbox puts the logo inside its own `.mapboxgl-ctrl` div and sets
-	   `style="display: none"` on that WRAPPER — not on the anchor — when
-	   the loaded style's attribution metadata does not request the logo.
-	   Rules targeting the anchor were therefore styling an element whose
-	   parent was already collapsed: the wordmark measured 0×0.
-
-	   `!important` is required and is not a shortcut. An inline style
-	   attribute outranks every selector here no matter how specific;
-	   `!important` is the only thing in CSS that outranks it. This is a
-	   one-time attribute written at control-add, not re-applied on a loop,
-	   so nothing fights it back. */
+	/* `!important` required — Mapbox sets `style="display:none"` inline on the wordmark's wrapper div, and only `!important` outranks an inline style. */
 	:global(.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl:has(.mapboxgl-ctrl-logo)) {
 		display: block !important;
 	}
 
-	/* Wordmark — same bordered treatment as the readout, and for the same
-	   reason: the basemap underneath it changes (dark globe, bright
-	   satellite, terrain), so anything relying on the map for contrast
-	   disappears on some of them.
-
-	   `background-color`, NOT the `background` SHORTHAND. The wordmark
-	   artwork IS this anchor's background-image (mapbox ships it as an
-	   inline data-URI) and the anchor has no text, so the image is the only
-	   thing there is to see. The shorthand resets every background-*
-	   longhand it does not mention, so `background: rgba(...)` wiped the
-	   wordmark and left a correctly-sized, correctly-bordered, EMPTY box. */
+	/* Use `background-color`, not the `background` shorthand — shorthand resets `background-image` too and wipes the wordmark (it's a data-URI background-image with no text). */
 	:global(.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-logo) {
 		opacity: 1;
 		box-sizing: content-box;
@@ -579,8 +429,7 @@ onMount(() => {
 		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 	}
 
-	/* Zoom readout — debug aid, so legibility beats subtlety: it must read
-	   instantly over bright satellite AND the dark globe. */
+	/* Zoom readout is a debug aid — legibility beats subtlety; must read over both bright satellite and the dark globe. */
 	:global(.rt-zoom-readout) {
 		background: rgba(0, 0, 0, 0.72);
 		color: #fff;
@@ -598,8 +447,7 @@ onMount(() => {
 		user-select: none;
 	}
 
-	/* Scale bar — same visual family as the readout so the pair reads as
-	   one set of instruments rather than two unrelated widgets. */
+	/* Scale bar matches the readout's styling so the pair reads as one instrument set. */
 	:global(.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-scale) {
 		background: rgba(0, 0, 0, 0.72);
 		border: 1px solid rgba(255, 255, 255, 0.55);

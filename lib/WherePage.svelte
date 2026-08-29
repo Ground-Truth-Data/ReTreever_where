@@ -19,12 +19,7 @@ import favouritesBoxRaw from "./whereAssets/favourites-box.svg?raw";
 import closeRaw from "./whereAssets/close-button.svg?raw";
 import photoFrameRaw from "./whereAssets/around-me-photo-frame.svg?raw";
 
-// ---- BITMAP ART ---------------------------------------------------
-// Imported, never requested from the host at "/pub-Rtvr/...". An import
-// is resolved by the bundler at build time and the bytes are copied into
-// whatever app builds this child; a leading-slash URL is resolved by the
-// BROWSER against whatever server answers, so it only ever worked under
-// the one host whose static/ folder happened to hold these files.
+// Imported, never a leading-slash URL — a leading-slash path resolves against whatever host serves the page, not the bundle, so it only worked under one host's static/ folder.
 import markerUrl from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg";
 import toolLine from "./assets/pub-Rtvr/where/tool-line.webp";
 import toolPolygon from "./assets/pub-Rtvr/where/tool-polygon.webp";
@@ -33,18 +28,7 @@ import toolAroundMe from "./assets/pub-Rtvr/where/tool-around-me.webp";
 import toolFavourites from "./assets/pub-Rtvr/where/tool-favourites.webp";
 import aroundMePhoto from "./assets/pub-Rtvr/where/around-me-photo.webp";
 
-/**
- * Page chrome for /retreeve/where, per Maps_Search_Layout_reference.png +
- * Maps_Plan_Marker_select_reference.jpg: gold page border, left tool panel
- * (line / poly / trash / around-me / favourites, in that order), the
- * "Around Me" popup with manual-area searchbar, the selected-marker
- * transparency box and the tree↔leaf fullscreen toggle. (A "Powered by harness"
- * badge used to sit bottom-right; it was removed — that corner belongs to
- * mapbox's required attribution, which the badge was crowding.)
- * The map engine + draw engine stay in rapper; anything that
- * reaches outside the page (drawn-feature and favourites persistence)
- * arrives as a prop so +page.svelte keeps ownership of it.
- */
+// Page chrome for /retreeve/where: gold border, left tool panel (line/poly/trash/around-me/favourites), Around Me popup, selected-marker box. Map/draw engine stay in rapper; anything reaching outside the page arrives as a prop.
 let {
 	initialFeatures = [],
 	onFeatureComplete,
@@ -61,11 +45,7 @@ let {
 	/** Fired when the trash tool wipes all drawings; the route clears storage. */
 	onFeaturesCleared?: () => void;
 	favourites?: FavouriteLocation[];
-	/**
-	 * Where the marker box links to. ReTreever passes its AppRoutes; the
-	 * rapper passes nothing, and the links simply do not render. A child
-	 * cannot know the host's URL map — that is the host's to own.
-	 */
+	/** Where the marker box links to — ReTreever passes AppRoutes; rapper passes nothing and the links simply don't render. */
 	routes?: WhereRoutes;
 	/** Passed straight through to WhereMap — see its prop docs. */
 	ensureMapboxGuards?: () => Promise<void>;
@@ -75,15 +55,7 @@ let {
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 } = $props();
 
-/**
- * The photo-frame SVG embeds a bitmap via <image href="…">, and it is injected
- * with {@html} — so unlike every other asset on this page the bundler never
- * parses that href and cannot rewrite it. The other raw SVGs here are pure
- * vector and need no such fix-up; this is the only one carrying a bitmap.
- * Rewriting the placeholder path in the raw text is what makes the frame's
- * photo travel with the child instead of being fetched from the host. Both
- * `href` and the legacy `xlink:href` carry it, hence the global replace.
- */
+/** Bundler can't rewrite the bitmap href inside a raw-injected SVG ({@html}), so the placeholder path is replaced manually — both href and legacy xlink:href. */
 const photoFrameSvg = photoFrameRaw.replaceAll(
 	"/pub-Rtvr/where/around-me-photo.webp",
 	aroundMePhoto,
@@ -98,41 +70,18 @@ let mapApi: WhereMap | undefined = $state();
 /** Set by WhereMap once the camera has zoomed/rotated away from home. */
 let viewChanged = $state(false);
 
-// ALWAYS TRUE, and deliberately a const rather than $state.
-// This flag had exactly one writer: the tree/leaf fullscreen button in the
-// bottom-left corner, which was removed. A $state nobody can write is a
-// constant wearing a rune — leaving it reactive would suggest the panel is
-// still hideable and invite someone to hunt for the control that hides it.
-// The {#if} below is kept so restoring a toggle is a one-line change.
+// Deliberately a const, not $state — its only writer (the fullscreen toggle) was removed; the {#if} stays so restoring a toggle is a one-line change.
 const toolsVisible = true;
-/**
- * CLOSED on load. The Around Me popup is the page's location-permission ask,
- * and an ask nobody made is a nag: it used to open itself on every visit, so
- * arriving at the map meant dismissing a permission prompt first. The ONLY
- * thing that opens it is the Around Me tool (the dog button) in the left
- * panel. Do not flip this back to `true`.
- */
+/** Closed on load — do not flip to `true`; it used to open itself on every visit and nag users for location permission. */
 let aroundMeOpen = $state(false);
 let favouritesOpen = $state(false);
 let areaQuery = $state("");
 let aroundMeStatus = $state("");
 
-/**
- * Where the browser last put us. Set on a successful fix, used to draw the
- * blue dot, and what lets the Around Me tool skip straight to flying there
- * instead of re-asking a question that's already been answered.
- */
+/** Last known browser fix — draws the blue dot and lets Around Me skip re-asking once set. */
 let userLocation = $state<[number, number] | null>(null);
 
-/**
- * A reload used to lose `userLocation` and the popup would ask all over
- * again — the same nag, one refresh later. The fix is NOT to cache a
- * coordinate (a stale fix is a lie about where you are): it's to ask the
- * browser whether permission is already granted. If it is, getCurrentPosition
- * resolves silently with NO prompt, so we can paint the dot on load and the
- * question never gets asked twice. If it's "prompt" or "denied" we do
- * nothing and wait for the Around Me tool — which is the whole point.
- */
+/** Do NOT cache a coordinate across reloads (a stale fix lies about location) — instead check permissions.query; if already granted, getCurrentPosition resolves silently with no prompt. */
 $effect(() => {
 	if (typeof navigator === "undefined" || !navigator.geolocation) return;
 	if (!navigator.permissions?.query) return;
@@ -160,8 +109,6 @@ $effect(() => {
 	};
 });
 
-// ── Tool panel ──────────────────────────────────────────────────────────
-
 function pickDrawTool(mode: "line" | "polygon") {
 	aroundMeOpen = false;
 	favouritesOpen = false;
@@ -174,11 +121,7 @@ function trashDrawings() {
 	onFeaturesCleared?.();
 }
 
-/**
- * The Around Me tool. Once location has been granted the question is settled,
- * so a second press flies you home rather than asking again — the popup only
- * appears while there's still something to ask.
- */
+/** Once location is granted, a second press flies to it instead of re-asking — the popup only appears while there's still something to ask. */
 function toggleAroundMe() {
 	favouritesOpen = false;
 	aroundMeStatus = "";
@@ -201,20 +144,12 @@ function toggleFavouritesPanel() {
 	favouritesOpen = !favouritesOpen;
 }
 
-/**
- * Back to the globe after navigating into a polygon. WhereMap owns the camera
- * half (home view, north up, deep-link params + hash cleared, selection
- * dropped); the page just closes its own popups alongside it. Drawn shapes
- * are deliberately NOT cleared — those are the user's work, and the trash
- * tool is what owns removing them.
- */
+/** Back to the globe: WhereMap owns the camera reset, this just closes popups. Drawn shapes are deliberately NOT cleared here — that's the trash tool's job. */
 function resetView() {
 	aroundMeOpen = false;
 	favouritesOpen = false;
 	mapApi?.resetView();
 }
-
-// ── Around Me ───────────────────────────────────────────────────────────
 
 function allowLocation() {
 	if (!navigator.geolocation) {
@@ -224,8 +159,7 @@ function allowLocation() {
 	aroundMeStatus = "Locating…";
 	navigator.geolocation.getCurrentPosition(
 		(pos) => {
-			// Store BEFORE flying: this is what paints the blue dot, and it's
-			// also the flag that stops the popup asking a second time.
+			// Store BEFORE flying — this paints the blue dot and is the flag that stops the popup asking again.
 			userLocation = [pos.coords.longitude, pos.coords.latitude];
 			flyToUser();
 			aroundMeOpen = false;
@@ -246,11 +180,7 @@ async function searchArea(event: SubmitEvent) {
 	try {
 		// Same token the map itself boots with (mapInit.ts).
 		const token = import.meta.env.VITE_MAPBOX_TOKEN;
-		// NAME THE VARIABLE RATHER THAN INTERPOLATING `undefined`.
-		// Unset, this built `...&access_token=undefined`, Mapbox answered 401,
-		// and the catch below reported "Search failed — try again" — which
-		// describes a network blip, not a missing configuration value, and
-		// sends you looking in entirely the wrong place.
+		// Checked explicitly rather than left to interpolate `undefined` — that built a silently-broken URL (401) whose catch message misleadingly reads as a network blip, not a missing token.
 		if (!token) {
 			aroundMeStatus =
 				"VITE_MAPBOX_TOKEN is not set — add it to rapper/.env and restart.";
@@ -284,10 +214,7 @@ async function searchArea(event: SubmitEvent) {
 	}
 }
 
-// ── Favourites ──────────────────────────────────────────────────────────
-
-// centroid may be a parsed object or a JSON string (Mapbox serializes
-// feature properties) — same tolerance as WhereMap's flyToAndSelect.
+// centroid may be a parsed object or a JSON string (Mapbox serializes feature properties) — same tolerance as WhereMap's flyToAndSelect.
 function featureLngLat(f: any): [number, number] | null {
 	let raw: unknown = null;
 	if (f?.geometry?.coordinates) raw = f.geometry.coordinates;
@@ -332,33 +259,14 @@ function formatHectares(hectares: number): string {
 	return Math.round(hectares).toLocaleString();
 }
 
-/**
- * Where the marker panel's project links point: that project's results page.
- *
- * Was `/retreeve/what?projectKey=…`, which nothing ever read — the search
- * page ignores the param, so every one of these links dropped the user on a
- * blank search page having silently discarded which project they clicked.
- * The results page (/retreeve/what/[projectKey]) is the consumer that param
- * was waiting for.
- *
- * The land row uses this too: land has no page of its own, and the project
- * it belongs to is the nearest thing the click means.
- *
- * Falls back to the search page when the feature carries no projectKey — an
- * orphaned polygon still gets a link that goes somewhere sensible.
- */
+/** Where the marker panel's project links point — that project's results page; land rows use it too. Falls back to the search page when there's no projectKey. */
 let detailsHref = $derived(
 	selectedFeature?.projectKey && routes.whatProject
 		? routes.whatProject(selectedFeature.projectKey)
 		: (routes.what ?? null),
 );
 
-/**
- * The organization's results page. Null — not a fallback link — when the
- * feature has no organizationKey: the row then stays plain text, because a
- * link labelled with an org's name that lands on an unfiltered list is worse
- * than no link. Many polygons genuinely have no stakeholder org attached.
- */
+/** The organization's results page — null (not a fallback) when there's no organizationKey, since an org-labelled link to an unfiltered list is worse than no link. */
 let orgHref = $derived(
 	selectedFeature?.organizationKey && routes.whoOrg
 		? routes.whoOrg(selectedFeature.organizationKey)
@@ -378,8 +286,7 @@ let orgHref = $derived(
 		{polygonsUrl}
 	/>
 
-	<!-- Draw engine: sources + in-progress popover only; the tool panel
-	     below drives it via the exported instance API. -->
+	<!-- Draw engine: sources + in-progress popover only; the tool panel drives it via the exported instance API. -->
 	<MapDrawControls
 		bind:this={drawApi}
 		{map}
@@ -396,7 +303,6 @@ let orgHref = $derived(
 	</div>
 
 	{#if toolsVisible}
-		<!-- ---- Left tool panel: line, poly, trash, around me, favourites ---- -->
 		<div class="tool-panel">
 			<div class="tool-panel-bg" aria-hidden="true">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -444,10 +350,7 @@ let orgHref = $derived(
 			</button>
 		</div>
 
-		<!-- ---- Reset view ----
-		     Sits under the five-slot tool panel rather than inside it: the
-		     panel art is five fixed cutouts, so a sixth button would fall off
-		     the slant. Only appears once there's something to undo. -->
+		<!-- Reset view sits below the tool panel, not inside it — the panel art is five fixed cutouts; a sixth button would fall off the slant. Only shows once there's something to undo. -->
 		{#if viewChanged || selectedFeature}
 			<button
 				type="button"
@@ -460,7 +363,6 @@ let orgHref = $derived(
 			</button>
 		{/if}
 
-		<!-- ---- Around Me popup + manual area searchbar ---- -->
 		{#if aroundMeOpen}
 			<div class="around-me" role="dialog" aria-label="Around Me">
 				<div class="around-window">
@@ -512,7 +414,6 @@ let orgHref = $derived(
 			</div>
 		{/if}
 
-		<!-- ---- Favourited locations panel ---- -->
 		{#if favouritesOpen}
 			<aside class="favourites-panel" aria-label="Favourited locations">
 				<div class="favourites-bg" aria-hidden="true">
@@ -547,7 +448,6 @@ let orgHref = $derived(
 			</aside>
 		{/if}
 
-		<!-- ---- Selected-marker transparency box ---- -->
 		{#if selectedFeature}
 			<aside class="marker-box" aria-label="Selected location details">
 				<div class="marker-box-bg" aria-hidden="true">
@@ -601,8 +501,7 @@ let orgHref = $derived(
 						<dt>Organization:</dt>
 						<dd>
 							{#if orgHref}
-								<!-- Key present but name missing is rare and real; the
-								     key is at least an identifier, never an empty link. -->
+								<!-- Key present but name missing is rare and real — the key is at least an identifier, never an empty link. -->
 								<a href={orgHref}>
 									{selectedFeature.organizationName ?? selectedFeature.organizationKey}
 								</a>
@@ -638,12 +537,7 @@ let orgHref = $derived(
 
 <style>
 	.where-stage {
-		/* Container for `cqw` units. The gold border's corner cutout is a
-		   FRACTION of this box (the SVG is preserveAspectRatio="none"), so
-		   the controls that sit inside the cutout are sized against the same
-		   box rather than the viewport — see the pocket rules in
-		   WhereMap.svelte. `size` (not `inline-size`) because the stage has
-		   an explicit height and both axes are wanted. */
+		/* Container for `cqw` units — sized against this box (not viewport) so the cutout controls track it; `size` not `inline-size` since both axes matter. */
 		container-type: size;
 		container-name: where-stage;
 		position: relative;
@@ -653,7 +547,6 @@ let orgHref = $derived(
 		overflow: hidden;
 	}
 
-	/* ---- Gold page border ---- */
 	.gold-border {
 		position: absolute;
 		inset: 0;
@@ -667,19 +560,12 @@ let orgHref = $derived(
 		display: block;
 	}
 
-	/* The designed chrome replaces Mapbox's default zoom/compass/style
-	   controls — the gold border's panel cutout is where they'd sit. */
+	/* Designed chrome replaces Mapbox's default zoom/compass/style controls — the gold border's panel cutout is where they'd sit. */
 	.where-stage :global(.mapboxgl-ctrl-top-left) {
 		display: none;
 	}
 
-	/* ---- Tool panel ----
-	   Sized in stage percentages so it tracks the gold border's left
-	   trapezoid cutout (the border SVG stretches to the stage, so its
-	   cutout lives at fixed fractions: x 0.5%–10.4%, y 11.5%–68%). The
-	   panel art's own slant matches the border's. Definite height matters:
-	   the five flex rows divide it evenly, which is what the % icon sizes
-	   below resolve against. */
+	/* Sized in stage percentages to track the gold border's left cutout (x 0.5%–10.4%, y 11.5%–68%); definite height matters since the five flex rows divide it evenly. */
 	.tool-panel {
 		position: absolute;
 		left: 0.8%;
@@ -713,8 +599,7 @@ let orgHref = $derived(
 	.tool-btn {
 		position: relative;
 		flex: 1;
-		/* Without this, the icons' intrinsic size becomes the flex minimum
-		   and the column blows past the panel instead of splitting evenly. */
+		/* Without this, icons' intrinsic size becomes the flex minimum and the column blows past the panel instead of splitting evenly. */
 		min-height: 0;
 		background: none;
 		border: none;
@@ -769,16 +654,10 @@ let orgHref = $derived(
 		opacity: 1;
 	}
 
-	/* ---- Reset view ----
-	   Aligned to the tool panel's column (left 0.8%, width 8.8%) and parked
-	   just below it, still inside the gold border's left cutout (which runs to
-	   y 68%). Round, so it reads as a separate control rather than a sixth
-	   slot in the panel. */
+	/* Aligned to the tool panel's column, parked just below it (still inside the cutout, y ≤ 68%); round so it reads as a separate control, not a sixth slot. */
 	.reset-btn {
 		position: absolute;
-		/* centred on the tool panel's column (left 0.8% + half its 8.8%) so it
-		   stays under the panel at any stage width instead of stretching with
-		   it — a 170px circle on a wide monitor is not a control */
+		/* Centred on the tool panel's column (left 0.8% + half its 8.8%) so it tracks the panel at any width — a fixed circle would blow up on a wide monitor. */
 		left: 5.2%;
 		top: 59%;
 		transform: translateX(-50%);
@@ -822,7 +701,6 @@ let orgHref = $derived(
 		}
 	}
 
-	/* ---- Around Me popup ---- */
 	.around-me {
 		position: absolute;
 		left: 50%;
@@ -853,8 +731,7 @@ let orgHref = $derived(
 		filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.55));
 	}
 
-	/* The window bg is absolutely positioned, so static content would paint
-	   underneath it — everything inside gets position:relative. */
+	/* Window bg is absolutely positioned, so content underneath needs position:relative or it paints below it. */
 	.around-photo {
 		position: relative;
 		width: 92%;
@@ -919,7 +796,6 @@ let orgHref = $derived(
 		text-align: center;
 	}
 
-	/* ---- Manual area searchbar ---- */
 	.area-search {
 		position: relative;
 		width: 138%;
@@ -975,7 +851,6 @@ let orgHref = $derived(
 		transform: translateX(3px);
 	}
 
-	/* ---- Shared popup close button ---- */
 	.popup-close {
 		position: absolute;
 		top: 5%;
@@ -1000,7 +875,6 @@ let orgHref = $derived(
 		display: block;
 	}
 
-	/* ---- Favourites panel ---- */
 	.favourites-panel {
 		position: absolute;
 		right: clamp(8px, 1.4vw, 24px);
@@ -1068,7 +942,6 @@ let orgHref = $derived(
 		color: #fff;
 	}
 
-	/* ---- Selected-marker transparency box ---- */
 	.marker-box {
 		position: absolute;
 		right: clamp(8px, 1.4vw, 24px);
@@ -1187,7 +1060,6 @@ let orgHref = $derived(
 		color: #fff;
 	}
 
-	/* ---- Mobile ---- */
 	@media (max-width: 767px) {
 		.tool-panel {
 			left: 4px;
