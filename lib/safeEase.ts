@@ -1,17 +1,9 @@
 import type * as mapboxgl from "mapbox-gl";
 import type { Coord } from "./coord";
 
-// mapbox-gl 3.x globe projection has an internal recursion in
-// setLocationAtPoint → set center → _updateZoomFromElevation that any animated
-// easeTo/flyTo triggers per-frame, blowing the stack. jumpTo skips
-// setLocationAtPoint entirely. This helper interpolates with rAF + jumpTo when
-// the map is on globe, and falls back to native easeTo on mercator.
+// ⚠️ mapbox-gl 3.x globe projection recursion (setLocationAtPoint → set center → _updateZoomFromElevation) makes animated easeTo/flyTo blow the stack — this interpolates via rAF+jumpTo on globe, falls back to easeTo on mercator.
 
 export type SafeEaseOptions = {
-    // Coord is the branded, validated tuple — `readonly [number, number]
-    // & brand`. Listed first so callers passing the result of toCoord()
-    // typecheck without casts. The raw tuple/LngLatLike paths stay for
-    // back-compat with existing call sites that have not migrated.
     center?: Coord | [number, number] | mapboxgl.LngLatLike;
     zoom?: number;
     duration?: number;
@@ -55,11 +47,7 @@ export function safeEase(
     map: mapboxgl.Map,
     opts: SafeEaseOptions,
 ): void {
-    // safeEase is the globe-projection sibling of safeMap.ts's wrappers,
-    // and like them it must NEVER let a non-finite value reach the Mapbox
-    // camera: a NaN zoom or center corrupts the transform and the map
-    // renders blank white (the pin create/edit white-out). Validate every
-    // input up front and bail loudly — never animate toward garbage.
+    // ⚠️ Never let a non-finite zoom/center reach the Mapbox camera — it corrupts the transform and renders blank white; validate up front and bail loudly.
     if (opts.zoom !== undefined && !Number.isFinite(opts.zoom)) {
         console.warn("[safeEase] rejected: zoom is not finite");
         return;
@@ -96,9 +84,7 @@ export function safeEase(
     const startLat = startCenter.lat;
     const startZoom = map.getZoom();
 
-    // The current camera is already corrupt — interpolating FROM a NaN
-    // only spreads it frame by frame. Bail; the health watchdog in
-    // mapInit.ts restores a finite camera.
+    // If the current camera is already non-finite, bail rather than interpolate from it — the watchdog in mapInit.ts restores a finite camera.
     if (
         !Number.isFinite(startLng) ||
         !Number.isFinite(startLat) ||
