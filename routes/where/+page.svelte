@@ -1,6 +1,8 @@
 <script lang="ts">
-import WherePage from "../lib/WherePage.svelte";
-import type { FavouriteLocation, WhereRoutes } from "../lib/whereTypes";
+import WherePage from "../../lib/WherePage.svelte";
+import EphemeralCard from "$rig/dev/EphemeralCard.svelte";
+import EphemeralDock from "$rig/dev/EphemeralDock.svelte";
+import type { FavouriteLocation, WhereRoutes } from "../../lib/whereTypes";
 import type { Feature } from "geojson";
 
 type HostProps = {
@@ -30,3 +32,4 @@ function toggleFavourite(loc: FavouriteLocation) {
 {:else}
 	<WherePage {favourites} ontogglefavourite={toggleFavourite} />
 {/if}
+<EphemeralDock side="left"><EphemeralCard title="where" /></EphemeralDock>
