@@ -17,7 +17,7 @@
     "svelte": "^5.19.0"
   },
   "devDependencies": {
-    "vitest": "*"
+    "vitest": "^2.1.9"
   },
   "scripts": {
     "test": "vitest run"
