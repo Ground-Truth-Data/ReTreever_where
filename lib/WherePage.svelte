@@ -37,7 +37,7 @@ let {
 	ontogglefavourite,
 	routes = {},
 	ensureMapboxGuards = async () => {},
-	polygonsUrl = "/polygons",
+	polygonsUrl,
 }: {
 	initialFeatures?: Feature[];
 	/** Fired with each finished drawing; the route persists it. */

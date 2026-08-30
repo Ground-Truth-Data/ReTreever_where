@@ -21,7 +21,7 @@ let {
 	selectedFeature = $bindable(null),
 	viewChanged = $bindable(false),
 	markerUrl = undefined,
-	polygonsUrl = "/polygons",
+	polygonsUrl,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
 }: {
@@ -283,7 +283,7 @@ onMount(() => {
 		});
 
 		// Fetch the deep-link target in parallel with map load.
-		if (hasTarget) {
+		if (hasTarget && polygonsUrl) {
 			(async () => {
 				try {
 					const response = await fetch(
