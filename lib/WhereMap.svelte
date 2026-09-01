@@ -6,8 +6,8 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import {
 	fullMapOptions,
 	initializeMap,
-} from "$parent/siblings/getCache_OnlineMap/lib/mapInit";
-import { defaultOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapConfig";
+} from "@ground-truth/getcache-onlinemap/lib/mapInit";
+import { defaultOptions } from "@ground-truth/getcache-onlinemap/lib/mapConfig";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
 import {

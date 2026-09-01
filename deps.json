@@ -4,8 +4,8 @@
   "allow": [
     "$app/navigation",
     "$app/stores",
-    "$parent/siblings/getCache_OnlineMap/lib/mapConfig",
-    "$parent/siblings/getCache_OnlineMap/lib/mapDrawControls.svelte",
+    "@ground-truth/getcache-onlinemap/lib/mapConfig",
+    "@ground-truth/getcache-onlinemap/lib/mapDrawControls.svelte",
     "$rig/dev/EphemeralCard.svelte",
     "$rig/dev/EphemeralDock.svelte",
     "./safeEase",

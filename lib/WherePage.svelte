@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { Feature } from "geojson";
 import WhereMap from "./WhereMap.svelte";
-import MapDrawControls from "$parent/siblings/getCache_OnlineMap/lib/mapDrawControls.svelte";
+import MapDrawControls from "@ground-truth/getcache-onlinemap/lib/mapDrawControls.svelte";
 import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
 import {

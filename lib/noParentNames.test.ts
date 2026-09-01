@@ -1,4 +1,4 @@
-// Rule: a child may not name a parent (ReTreever/rapper/vercel) as a location — reach one only via $parent/siblings/... or a prop.
+// Rule: a child may not name a parent (ReTreever/rapper/vercel) as a location — reach a sibling only by package name (@ground-truth/<child>/)... or a prop.
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,14 +68,14 @@ describe("the child names no parent", () => {
 				`side on one machine, it DOES resolve. It stops resolving the ` +
 				`moment this folder is published on its own, which is the point ` +
 				`of the folder.\n\n` +
-				`Reach a parent through the alias ($parent/siblings/...), or take what you ` +
+				`Import a sibling by its package name (@ground-truth/<child>/...), or take what you ` +
 				`need as a prop. Never by name.`,
 		).toEqual([]);
 	});
 
 	it("the check bites — a parent-named path is detected", () => {
 		// Without this, a broken regex silently passes everything above.
-		const ok = 'import x from "$parent/siblings/getCache_OnlineMap/lib/foo";';
+		const ok = 'import x from "@ground-truth/getcache-onlinemap/lib/foo";';
 		expect([...ok.matchAll(PARENT_AS_LOCATION)].length).toBe(0);
 
 		// Both shapes (mid-path and terminal) are asserted by name — losing either re-opens the hole the regex used to miss.
