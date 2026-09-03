@@ -244,8 +244,9 @@ onMount(() => {
 		const handleFeatureSelect = (feature: any) => {
 			selectedFeature = feature;
 			if (feature?.landKey) {
-				// Must be `/where`, not `/retreeve/where` (no longer a route) — the latter forces a full page reload instead of client-side nav.
-				goto(`/where?land=${encodeURIComponent(feature.landKey)}`, {
+				// Current pathname, so /where/orgs stays /where/orgs — a hard-coded `/where` dropped the view segment on every marker tap.
+				const base = $page.url.pathname;
+				goto(`${base}?land=${encodeURIComponent(feature.landKey)}`, {
 					replaceState: true,
 					noScroll: true,
 				});
@@ -254,6 +255,10 @@ onMount(() => {
 
 		mapCleanup = initializeMap(mapContainer, {
 			...fullMapOptions,
+			// The page draws its own zoom buttons and style switcher in the gold border's slot art; only the scale bar is Mapbox's.
+			showNavigation: false,
+			showStyleControl: false,
+			showScale: true,
 			enableHash: true,
 			// Through the router, not raw history — see mapUtilsHash.
 			writeHash: (url) => replaceState(url, {}),

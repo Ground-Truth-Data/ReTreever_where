@@ -4,7 +4,9 @@
   "allow": [
     "$app/navigation",
     "$app/stores",
+    "$gc/assets/tree_white.webp",
     "$parent/siblings/getCache_OnlineMap/lib/mapConfig",
+    "$parent/siblings/getCache_OnlineMap/lib/mapControlBaseToggle",
     "$parent/siblings/getCache_OnlineMap/lib/mapDrawControls.svelte",
     "$rig/dev/EphemeralCard.svelte",
     "$rig/dev/EphemeralDock.svelte",

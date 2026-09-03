@@ -1,7 +1,11 @@
 <script lang="ts">
 import type { Feature } from "geojson";
+import { page } from "$app/stores";
 import WhereMap from "./WhereMap.svelte";
 import MapDrawControls from "$parent/siblings/getCache_OnlineMap/lib/mapDrawControls.svelte";
+import { defaultStyleOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapControlBaseToggle";
+import { fullMapOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapConfig";
+import type { WhereView } from "../params/whereView";
 import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
 import {
@@ -18,17 +22,22 @@ import inputBarRaw from "./whereAssets/around-me-input-bar.svg?raw";
 import favouritesBoxRaw from "./whereAssets/favourites-box.svg?raw";
 import closeRaw from "./whereAssets/close-button.svg?raw";
 import photoFrameRaw from "./whereAssets/around-me-photo-frame.svg?raw";
+import zoomPanelRaw from "./whereAssets/zoom-panel.svg?raw";
 
 // Imported, never a leading-slash URL — a leading-slash path resolves against whatever host serves the page, not the bundle, so it only worked under one host's static/ folder.
 import markerUrl from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg";
-import toolLine from "./assets/pub-Rtvr/where/tool-line.webp";
 import toolPolygon from "./assets/pub-Rtvr/where/tool-polygon.webp";
-import toolTrash from "./assets/pub-Rtvr/where/tool-trash.webp";
 import toolAroundMe from "./assets/pub-Rtvr/where/tool-around-me.webp";
 import toolFavourites from "./assets/pub-Rtvr/where/tool-favourites.webp";
 import aroundMePhoto from "./assets/pub-Rtvr/where/around-me-photo.webp";
+import toolPeople from "./whereAssets/tool-people.svg";
+import toolMap from "./whereAssets/tool-map.svg";
+import toolPlus from "./whereAssets/tool-plus.svg";
+import toolMinus from "./whereAssets/tool-minus.svg";
+// The Get Cache tree — shared art, imported in place, never copied into the child.
+import toolTree from "$gc/assets/tree_white.webp";
 
-// Page chrome for /retreeve/where: gold border, left tool panel (line/poly/trash/around-me/favourites), Around Me popup, selected-marker box. Map/draw engine stay in rapper; anything reaching outside the page arrives as a prop.
+// Page chrome for /where: gold border, left tool panel (orgs/projects/favourites/polygon/basemap), right zoom slots, Around Me (bottom-right), selected-marker box. Map/draw engine stay in rapper; anything reaching outside the page arrives as a prop.
 let {
 	initialFeatures = [],
 	onFeatureComplete,
@@ -38,11 +47,13 @@ let {
 	routes = {},
 	ensureMapboxGuards = async () => {},
 	polygonsUrl,
+	view = null,
+	basePath = "/where",
 }: {
 	initialFeatures?: Feature[];
 	/** Fired with each finished drawing; the route persists it. */
 	onFeatureComplete?: (feature: Feature) => void;
-	/** Fired when the trash tool wipes all drawings; the route clears storage. */
+	/** Fired when all drawings are wiped; the route clears storage. No slot triggers it today (the trash tool was cut) — see docs/WHERE_TODO.md. */
 	onFeaturesCleared?: () => void;
 	favourites?: FavouriteLocation[];
 	/** Where the marker box links to — ReTreever passes AppRoutes; rapper passes nothing and the links simply don't render. */
@@ -53,6 +64,10 @@ let {
 	polygonsUrl?: string;
 	/** Fired by the ★ in the marker box; the route owns the stored list. */
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
+	/** The URL's view segment (/where/orgs → "orgs"); null on bare /where. Lights the people/tree slot. */
+	view?: WhereView | null;
+	/** Where the view links are built from — the child's own route, so a host never has to say. */
+	basePath?: string;
 } = $props();
 
 /** Bundler can't rewrite the bitmap href inside a raw-injected SVG ({@html}), so the placeholder path is replaced manually — both href and legacy xlink:href. */
@@ -109,16 +124,45 @@ $effect(() => {
 	};
 });
 
-function pickDrawTool(mode: "line" | "polygon") {
+/** Instance method, not a slot: the trash tool was cut and nothing on the panel owns "clear" yet (docs/WHERE_TODO.md). */
+export function clearDrawings() {
+	drawApi?.clearAll();
+	onFeaturesCleared?.();
+}
+
+function pickDrawTool(mode: "polygon") {
 	aroundMeOpen = false;
 	favouritesOpen = false;
 	drawApi?.setMode(mode);
 }
 
-function trashDrawings() {
-	if (!window.confirm("Clear all shapes drawn on this map?")) return;
-	drawApi?.clearAll();
-	onFeaturesCleared?.();
+/** People/tree are links, not buttons: same view again → bare basePath. Query and hash ride along so a ?land= deep link and the camera survive the toggle. */
+function viewHref(target: WhereView): string {
+	const path = view === target ? basePath : `${basePath}/${target}`;
+	return `${path}${$page.url.search}${$page.url.hash}`;
+}
+
+/** Same soft-limit elastic as the wheel — safeEase refuses non-finite zoom and mapInit's zoomend snaps back past the overshoot. */
+function zoomBy(delta: number) {
+	if (!map) return;
+	safeEase(map, { zoom: map.getZoom() + delta, duration: 320 });
+}
+
+// Basemap cycles natural → streets → satellite on each tap; starts on whatever the map booted with.
+let styleIdx = $state(
+	Math.max(
+		0,
+		defaultStyleOptions.findIndex((o) => o.styleUrl === fullMapOptions.style),
+	),
+);
+let nextStyle = $derived(
+	defaultStyleOptions[(styleIdx + 1) % defaultStyleOptions.length],
+);
+
+function cycleStyle() {
+	if (!map) return;
+	styleIdx = (styleIdx + 1) % defaultStyleOptions.length;
+	map.setStyle(defaultStyleOptions[styleIdx].styleUrl);
 }
 
 /** Once location is granted, a second press flies to it instead of re-asking — the popup only appears while there's still something to ask. */
@@ -308,14 +352,34 @@ let orgHref = $derived(
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html buttonPanelRaw}
 			</div>
+			<a
+				class="tool-btn"
+				class:tool-active={view === "orgs"}
+				href={viewHref("orgs")}
+				aria-current={view === "orgs" ? "page" : undefined}
+				data-sveltekit-noscroll
+			>
+				<img src={toolPeople} alt="" class="icon-people" />
+				<span class="tool-tip">Organizations</span>
+			</a>
+			<a
+				class="tool-btn"
+				class:tool-active={view === "projects"}
+				href={viewHref("projects")}
+				aria-current={view === "projects" ? "page" : undefined}
+				data-sveltekit-noscroll
+			>
+				<img src={toolTree} alt="" class="icon-tree" />
+				<span class="tool-tip">Projects</span>
+			</a>
 			<button
 				type="button"
 				class="tool-btn"
-				class:tool-active={drawIntent === "line"}
-				onclick={() => pickDrawTool("line")}
+				class:tool-active={favouritesOpen}
+				onclick={toggleFavouritesPanel}
 			>
-				<img src={toolLine} alt="" />
-				<span class="tool-tip">Draw a line</span>
+				<img src={toolFavourites} alt="" />
+				<span class="tool-tip">Favourited locations</span>
 			</button>
 			<button
 				type="button"
@@ -326,29 +390,49 @@ let orgHref = $derived(
 				<img src={toolPolygon} alt="" />
 				<span class="tool-tip">Draw a polygon</span>
 			</button>
-			<button type="button" class="tool-btn" onclick={trashDrawings}>
-				<img src={toolTrash} alt="" />
-				<span class="tool-tip">Clear drawn shapes</span>
-			</button>
-			<button
-				type="button"
-				class="tool-btn"
-				class:tool-active={aroundMeOpen}
-				onclick={toggleAroundMe}
-			>
-				<img src={toolAroundMe} alt="" />
-				<span class="tool-tip">Around Me</span>
-			</button>
-			<button
-				type="button"
-				class="tool-btn"
-				class:tool-active={favouritesOpen}
-				onclick={toggleFavouritesPanel}
-			>
-				<img src={toolFavourites} alt="" />
-				<span class="tool-tip">Favourited locations</span>
+			<button type="button" class="tool-btn" onclick={cycleStyle}>
+				<img src={toolMap} alt="" class="icon-map" />
+				<span class="tool-tip">Basemap: {nextStyle.label}</span>
 			</button>
 		</div>
+
+		<!-- Zoom lives on the RIGHT in the same slot art (mirrored), replacing Mapbox's top-left stack. -->
+		<div class="zoom-panel">
+			<div class="tool-panel-bg" aria-hidden="true">
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html zoomPanelRaw}
+			</div>
+			<button
+				type="button"
+				class="tool-btn"
+				aria-label="Zoom in"
+				onclick={() => zoomBy(1)}
+			>
+				<img src={toolPlus} alt="" class="icon-zoom" />
+				<span class="tool-tip tool-tip-left">Zoom in</span>
+			</button>
+			<button
+				type="button"
+				class="tool-btn"
+				aria-label="Zoom out"
+				onclick={() => zoomBy(-1)}
+			>
+				<img src={toolMinus} alt="" class="icon-zoom" />
+				<span class="tool-tip tool-tip-left">Zoom out</span>
+			</button>
+		</div>
+
+		<!-- Around Me sits alone bottom-right, round like the reset button — the dog is a place to go, not a tool. -->
+		<button
+			type="button"
+			class="around-btn"
+			class:tool-active={aroundMeOpen}
+			aria-label="Around Me"
+			onclick={toggleAroundMe}
+		>
+			<img src={toolAroundMe} alt="" />
+			<span class="tool-tip tool-tip-left">Around Me</span>
+		</button>
 
 		<!-- Reset view sits below the tool panel, not inside it — the panel art is five fixed cutouts; a sixth button would fall off the slant. Only shows once there's something to undo. -->
 		{#if viewChanged || selectedFeature}
@@ -596,9 +680,28 @@ let orgHref = $derived(
 		display: block;
 	}
 
+	/* Mirror of .tool-panel on the right edge: two slots, art rises toward the screen edge. */
+	.zoom-panel {
+		position: absolute;
+		right: 0.8%;
+		top: 7%;
+		width: 8.8%;
+		/* 2 slots of the 5-slot panel's 48.5% height, plus the slot art's own aspect. */
+		height: 19.5%;
+		min-width: 54px;
+		z-index: 20;
+		display: flex;
+		flex-direction: column;
+		padding: 1.5% 0.6%;
+		box-sizing: border-box;
+	}
+
 	.tool-btn {
 		position: relative;
 		flex: 1;
+		/* Two slots are <a>, three are <button> — one look for both. */
+		text-decoration: none;
+		color: inherit;
 		/* Without this, icons' intrinsic size becomes the flex minimum and the column blows past the panel instead of splitting evenly. */
 		min-height: 0;
 		background: none;
@@ -617,6 +720,69 @@ let orgHref = $derived(
 		max-width: 68%;
 		object-fit: contain;
 		transition: filter 0.15s ease;
+	}
+
+	/* The webp tools are drawn light; the SVGs and the tree are pure white — pulled to the same weight per icon, not per slot. */
+	.tool-btn .icon-people {
+		height: 46%;
+	}
+
+	.tool-btn .icon-tree {
+		height: 66%;
+	}
+
+	.tool-btn .icon-map {
+		height: 50%;
+	}
+
+	.tool-btn .icon-zoom {
+		height: 44%;
+	}
+
+	/* Right-side tips open leftward so they don't fall off the screen. */
+	.tool-tip-left {
+		left: auto;
+		right: calc(100% + 10px);
+	}
+
+	/* Same family as .reset-btn; bottom-right, clear of the gold border's corner notch (x ≥ 89%, y ≥ 92%). */
+	.around-btn {
+		position: absolute;
+		right: 3.2%;
+		bottom: 12%;
+		width: clamp(44px, 3.8vw, 64px);
+		aspect-ratio: 1;
+		z-index: 20;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: 2px solid #fad702;
+		border-radius: 9999px;
+		background: rgba(23, 29, 49, 0.82);
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+		transition:
+			background 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+
+	.around-btn img {
+		width: 70%;
+		height: auto;
+		display: block;
+	}
+
+	.around-btn:hover,
+	.around-btn:focus-visible,
+	.around-btn.tool-active {
+		background: rgba(250, 215, 2, 0.18);
+		box-shadow: 0 0 8px rgba(250, 215, 2, 0.55);
+	}
+
+	.around-btn:hover .tool-tip,
+	.around-btn:focus-visible .tool-tip {
+		opacity: 1;
 	}
 
 	.tool-btn:hover img,
@@ -1066,6 +1232,19 @@ let orgHref = $derived(
 			top: 12%;
 			width: 54px;
 			height: 46%;
+		}
+
+		.zoom-panel {
+			right: 4px;
+			top: 12%;
+			width: 54px;
+			height: 18.5%;
+		}
+
+		.around-btn {
+			right: 10px;
+			bottom: 14%;
+			width: 48px;
 		}
 
 		.tool-tip {
