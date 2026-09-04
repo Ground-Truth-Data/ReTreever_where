@@ -660,7 +660,8 @@ let orgHref = $derived(
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
-		padding: 1.5% 0.6%;
+		/* No padding: percentage padding resolves against the STAGE width, and even 1.5% of it pushed row one 14px below its cutout and row five 12px above. The five equal rows match the art's five slots within 2% only when they span the full box. */
+		padding: 0;
 		box-sizing: border-box;
 	}
 
@@ -685,14 +686,14 @@ let orgHref = $derived(
 		position: absolute;
 		right: 0.8%;
 		top: 7%;
-		width: 8.8%;
-		/* 2 slots of the 5-slot panel's 48.5% height, plus the slot art's own aspect. */
-		height: 19.5%;
-		min-width: 54px;
+		/* Two-thirds of the left panel's slot size — zoom is a smaller control than a tool. */
+		width: 5.9%;
+		height: 13%;
+		min-width: 38px;
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
-		padding: 1.5% 0.6%;
+		padding: 0;
 		box-sizing: border-box;
 	}
 
@@ -724,23 +725,25 @@ let orgHref = $derived(
 
 	/* The webp tools are drawn light; the SVGs and the tree are pure white — pulled to the same weight per icon, not per slot. */
 	.tool-btn .icon-people {
-		height: 46%;
+		height: 50%;
 	}
 
 	.tool-btn .icon-tree {
-		height: 66%;
+		height: 72%;
 	}
 
 	.tool-btn .icon-map {
 		height: 50%;
 	}
 
+	/* Big glyph in a small slot — the +/− are the whole point of the slot. */
 	.tool-btn .icon-zoom {
-		height: 44%;
+		height: 64%;
+		max-width: 80%;
 	}
 
-	/* Right-side tips open leftward so they don't fall off the screen. */
-	.tool-tip-left {
+	/* Right-side tips open leftward so they don't fall off the screen. Two classes so it outranks .tool-tip's `left`, declared later in this file. */
+	.tool-tip.tool-tip-left {
 		left: auto;
 		right: calc(100% + 10px);
 	}
@@ -1237,8 +1240,8 @@ let orgHref = $derived(
 		.zoom-panel {
 			right: 4px;
 			top: 12%;
-			width: 54px;
-			height: 18.5%;
+			width: 38px;
+			height: 12.5%;
 		}
 
 		.around-btn {
