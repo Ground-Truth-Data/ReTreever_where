@@ -18,3 +18,8 @@ secrets/
 # Cloudflare Workers local secrets + state.
 .dev.vars
 .wrangler/
+
+# standaloneTest.sh vendors siblings in here to prove this child runs
+# with no workspace around it, then leaves the copy behind. Generated, never
+# committed — unlike _rapper/, which IS tracked so a lone clone can run.
+_siblings/
