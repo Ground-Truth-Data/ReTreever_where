@@ -8,12 +8,12 @@ import {
 	initializeMap,
 } from "$parent/siblings/getCache_OnlineMap/lib/mapInit";
 import { defaultOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapConfig";
-import { safeEase } from "./safeEase";
-import { safeJumpTo } from "./safeMap";
+import { safeEase } from "$parent/siblings/getCache_OnlineMap/lib/safeEase";
+import { safeJumpTo } from "$parent/siblings/getCache_OnlineMap/lib/safeMap";
 import {
 	toCoordFromArray,
 	type Coord,
-} from "./coord";
+} from "$parent/siblings/getCache_OnlineMap/lib/coord";
 
 // Map-engine wiring for /retreeve/where — rapper stays the engine (mapInit, safeEase, draw sources); this file is just the glue.
 let {

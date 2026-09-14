@@ -40,20 +40,26 @@ Three modules exist for one reason: a NaN or out-of-range value reaching
 Mapbox's projection math corrupts the camera permanently, and every later call
 crashes deep in `_calcMatrices` with an unhelpful stack.
 
-- `lib/coord.ts` — `Coord`, a branded `[lng, lat]` tuple you can only build
+All three live in `getCache_OnlineMap/lib/` and are imported from there, the
+same way this child already takes `mapInit`, `mapConfig` and `mapDrawControls`:
+
+- `coord.ts` — `Coord`, a branded `[lng, lat]` tuple you can only build
   through the validators. Values are checked at the boundary, not at use.
-- `lib/safeMap.ts` — the only sanctioned way to move the camera. `flyTo`,
+- `safeMap.ts` — the only sanctioned way to move the camera. `flyTo`,
   `fitBounds`, `easeTo`, `jumpTo`, `panTo`, `setCenter`, `setZoom`,
   `setBearing` and `setPitch` all go through these wrappers; direct calls are
   banned and checked for.
-- `lib/safeEase.ts` — works around mapbox-gl 3.x globe projection recursion
+- `safeEase.ts` — works around mapbox-gl 3.x globe projection recursion
   (`setLocationAtPoint` → set center → `_updateZoomFromElevation`), which blows
   the stack on animated `easeTo`/`flyTo`. Interpolates via rAF + `jumpTo` on
   globe, falls back to `easeTo` on mercator.
 
-These live here rather than in a shared folder on purpose: Phase 1 dissolved
-`mapShared/` and pushed its modules down into the children that actually used
-them, so they travel with this child when it is lifted.
+⚠️ They must NOT be copied back into this child. `safeEase` cancels a previous
+animation through a module-level `WeakMap<Map, number>`, and `initializeMap`
+(getCache_OnlineMap) attaches a `zoomend` handler that eases the same map
+through its own copy. A second copy here means two registries over one map:
+neither can cancel the other's rAF loop, and both write `jumpTo` on alternating
+frames. That is what a local fork of these files caused before.
 
 ## Tests
 

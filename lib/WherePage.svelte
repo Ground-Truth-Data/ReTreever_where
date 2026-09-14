@@ -6,8 +6,8 @@ import MapDrawControls from "$parent/siblings/getCache_OnlineMap/lib/mapDrawCont
 import { defaultStyleOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapControlBaseToggle";
 import { fullMapOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapConfig";
 import type { WhereView } from "../params/whereView";
-import { safeEase } from "./safeEase";
-import { safeFitBounds } from "./safeMap";
+import { safeEase } from "$parent/siblings/getCache_OnlineMap/lib/safeEase";
+import { safeFitBounds } from "$parent/siblings/getCache_OnlineMap/lib/safeMap";
 import {
 	formatTransparencyScore,
 	type FavouriteLocation,
