@@ -49,7 +49,7 @@ Gone: line tool, trash, the Mapbox top-left +/−/pitch/style stack.
 - [ ] **Style switch and drawn shapes.** `map.setStyle` drops custom sources; check `MapDrawControls` re-adds its draw layers after a basemap swap (the old dropdown had the same exposure, so not a regression — just untested).
 - [ ] **Mobile breakpoint pass.** Right-side zoom panel and the dog button have first-guess `@media (max-width: 767px)` positions; check on a phone width.
 - [ ] Hover tooltips for the right-side buttons mirror left (they open to the left).
-- [ ] `hitch_test.sh` and `packTest.sh` run green for `ReTreever_where` after the `deps.json` additions.
+- [ ] `ReTreever_where` builds clean as a dressed child cloned on its own (no `fetch/` above it) after the `deps.json` additions. The old `hitch_test.sh` / `packTest.sh` checks were deleted 11 Sep 2026.
 - [ ] Ship: child pushed (`gitEr/publishChildren.sh`), registry change in rapper, ReTreever + OnlineMap committed.
 
 ## Decisions taken without asking (redirect if wrong)
