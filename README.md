@@ -14,7 +14,7 @@ Serves `/where`. Mounted alone, `/` reroutes to it.
 Unlike the other children, this one is **not self-contained**. It takes the
 online map from `getCache_OnlineMap` sitting beside it:
 
-- `$parent/siblings/getCache_OnlineMap/lib/mapConfig`
+- `$parent/siblings/getCache_OnlineMap/lib/MAP_CONFIG`
 - `$parent/siblings/getCache_OnlineMap/lib/mapDrawControls.svelte`
 
 Clone this repo on its own and those imports resolve to nothing. The alias is

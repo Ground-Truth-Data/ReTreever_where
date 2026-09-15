@@ -2,12 +2,12 @@
 import type { Feature } from "geojson";
 import { page } from "$app/stores";
 import WhereMap from "./WhereMap.svelte";
-import MapDrawControls from "$parent/siblings/getCache_OnlineMap/lib/mapDrawControls.svelte";
-import { defaultStyleOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapControlBaseToggle";
-import { fullMapOptions } from "$parent/siblings/getCache_OnlineMap/lib/mapConfig";
+import WhereDrawControls from "./WhereDrawControls.svelte";
+import { defaultStyleOptions } from "./mapControlBaseToggle";
+import { fullMapOptions } from "./MAP_CONFIG";
 import type { WhereView } from "../params/whereView";
-import { safeEase } from "$parent/siblings/getCache_OnlineMap/lib/safeEase";
-import { safeFitBounds } from "$parent/siblings/getCache_OnlineMap/lib/safeMap";
+import { safeEase } from "./safeEase";
+import { safeFitBounds } from "./safeMap";
 import {
 	formatTransparencyScore,
 	type FavouriteLocation,
@@ -79,7 +79,7 @@ const photoFrameSvg = photoFrameRaw.replaceAll(
 let map: import("mapbox-gl").Map | null = $state(null);
 let selectedFeature: any = $state(null);
 let drawIntent: "polygon" | "line" | null = $state(null);
-let drawApi: MapDrawControls | undefined = $state();
+let drawApi: WhereDrawControls | undefined = $state();
 /** Instance handle for WhereMap.resetView() — it owns the home camera. */
 let mapApi: WhereMap | undefined = $state();
 /** Set by WhereMap once the camera has zoomed/rotated away from home. */
@@ -331,11 +331,10 @@ let orgHref = $derived(
 	/>
 
 	<!-- Draw engine: sources + in-progress popover only; the tool panel drives it via the exported instance API. -->
-	<MapDrawControls
+	<WhereDrawControls
 		bind:this={drawApi}
 		{map}
 		bind:drawIntent
-		chrome="external"
 		{onFeatureComplete}
 		{initialFeatures}
 	/>
