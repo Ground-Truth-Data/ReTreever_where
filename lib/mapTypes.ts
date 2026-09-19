@@ -107,7 +107,6 @@ export interface MapOptions {
     onMapCreated?: (map: import("mapbox-gl").Map) => void;
 }
 
-// Re-export interface for backward compatibility with geoToggle plugin
 export interface PolygonConfig {
     id: string;
     path: string;

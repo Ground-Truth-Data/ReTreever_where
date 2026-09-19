@@ -40,6 +40,13 @@ const ONLINE_STACK = ["DIN Pro Medium", "Arial Unicode MS Bold"];
 /** Bold variant, for count badges and other emphasis. */
 const ONLINE_STACK_BOLD = ["DIN Pro Bold", "Arial Unicode MS Bold"];
 
+/** The bundled glyphs' own path, wherever they are served from. Testing for a
+ *  LEADING SLASH instead missed the offline map the moment its style started
+ *  writing `origin + path`: an absolute same-origin URL is still our glyphs,
+ *  but it read as hosted, so every offline symbol layer asked for DIN Pro and
+ *  404'd. Match the path, not the shape of the URL. */
+const BUNDLED_PATH = "/mobileAssets/worldBase/glyphs/";
+
 /**
  * Does this map serve its glyphs from our own origin (the offline base style)?
  *
@@ -48,13 +55,6 @@ const ONLINE_STACK_BOLD = ["DIN Pro Bold", "Arial Unicode MS Bold"];
  * treat as ONLINE, because that is the map users are on the overwhelming
  * majority of the time, and a wrong guess costs a font fallback, not a crash.
  */
-/** The bundled glyphs' own path, wherever they are served from. Testing for a
- *  LEADING SLASH instead missed the offline map the moment its style started
- *  writing `origin + path`: an absolute same-origin URL is still our glyphs,
- *  but it read as hosted, so every offline symbol layer asked for DIN Pro and
- *  404'd. Match the path, not the shape of the URL. */
-const BUNDLED_PATH = "/mobileAssets/worldBase/glyphs/";
-
 export function usesBundledGlyphs(map: MapboxMap): boolean {
 	try {
 		const glyphs = map.getStyle?.()?.glyphs;
