@@ -1,6 +1,8 @@
 /**
  * glyphStack.ts — THE font stack for every symbol layer, chosen from the LIVE map.
  *
+ * TODO: duplicated verbatim in getCache_OnlineMap/lib/draw/glyphStack.ts — collapse into shared OSEM code (project_osem_map_source_of_truth).
+ *
  * ── Why this exists ──
  * There is no single `text-font` value that is correct on both maps, and trying
  * to write one is how this bug kept coming back:
