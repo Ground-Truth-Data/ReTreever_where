@@ -75,7 +75,7 @@ $effect(() => {
 	if (!map) return;
 	setSource("draw-edges", buildDrawEdgesFC(vertices));
 	setSource("draw-vertices", buildDrawVerticesFC(vertices));
-	setSource("provisional-polygon", buildProvisionalPolygonFC(vertices));
+	setSource("provisional-polygon", buildProvisionalPolygonFC(vertices, "polygon"));
 });
 
 function finish() {

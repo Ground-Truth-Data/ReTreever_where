@@ -294,7 +294,7 @@ onMount(() => {
 						`${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}mode=centroids`,
 					);
 					if (!response.ok) return;
-					const data = await response.json();
+					const data: { features?: any[] } = await response.json();
 					let targetFeature: any = null;
 					if (landParam) {
 						const match = data.features?.find(

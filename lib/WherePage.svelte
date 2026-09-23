@@ -235,7 +235,9 @@ async function searchArea(event: SubmitEvent) {
 			`?types=region,district,place,country&limit=1&access_token=${token}`;
 		const res = await fetch(url);
 		if (!res.ok) throw new Error(`geocoding ${res.status}`);
-		const data = await res.json();
+		const data: {
+			features?: { bbox?: [number, number, number, number]; center?: [number, number] }[];
+		} = await res.json();
 		const hit = data?.features?.[0];
 		if (!hit) {
 			aroundMeStatus = "No matching area found.";
@@ -333,7 +335,7 @@ let orgHref = $derived(
 	<!-- Draw engine: sources + in-progress popover only; the tool panel drives it via the exported instance API. -->
 	<WhereDrawControls
 		bind:this={drawApi}
-		{map}
+		map={map ?? undefined}
 		bind:drawIntent
 		{onFeatureComplete}
 		{initialFeatures}
