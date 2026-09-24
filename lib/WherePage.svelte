@@ -24,7 +24,7 @@ import closeRaw from "./whereAssets/close-button.svg?raw";
 import photoFrameRaw from "./whereAssets/around-me-photo-frame.svg?raw";
 import zoomPanelRaw from "./whereAssets/zoom-panel.svg?raw";
 
-// Imported, never a leading-slash URL — a leading-slash path resolves against whatever host serves the page, not the bundle, so it only worked under one host's static/ folder.
+// Imported, never a leading-slash URL: that resolves against the host, not the bundle.
 import markerUrl from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg";
 import toolPolygon from "./assets/pub-Rtvr/where/tool-polygon.webp";
 import toolAroundMe from "./assets/pub-Rtvr/where/tool-around-me.webp";
@@ -34,10 +34,9 @@ import toolPeople from "./whereAssets/tool-people.svg";
 import toolMap from "./whereAssets/tool-map.svg";
 import toolPlus from "./whereAssets/tool-plus.svg";
 import toolMinus from "./whereAssets/tool-minus.svg";
-// The Get Cache tree — shared art, imported in place, never copied into the child.
 import toolTree from "$gc/assets/tree_white.webp";
 
-// Page chrome for /where: gold border, left tool panel (orgs/projects/favourites/polygon/basemap), right zoom slots, Around Me (bottom-right), selected-marker box. Map/draw engine stay in rapper; anything reaching outside the page arrives as a prop.
+// Page chrome for /where; anything reaching outside the page arrives as a prop.
 let {
 	initialFeatures = [],
 	onFeatureComplete,
@@ -51,26 +50,23 @@ let {
 	basePath = "/where",
 }: {
 	initialFeatures?: Feature[];
-	/** Fired with each finished drawing; the route persists it. */
+	/** The route persists it. */
 	onFeatureComplete?: (feature: Feature) => void;
-	/** Fired when all drawings are wiped; the route clears storage. No slot triggers it today (the trash tool was cut) — see docs/WHERE_TODO.md. */
+	/** The route clears storage. Nothing triggers it today (docs/WHERE_TODO.md). */
 	onFeaturesCleared?: () => void;
 	favourites?: FavouriteLocation[];
-	/** Where the marker box links to — ReTreever passes AppRoutes; rapper passes nothing and the links simply don't render. */
+	/** Where the marker box links to; with none passed the links don't render. */
 	routes?: WhereRoutes;
-	/** Passed straight through to WhereMap — see its prop docs. */
 	ensureMapboxGuards?: () => Promise<void>;
-	/** Passed straight through to WhereMap — see its prop docs. */
 	polygonsUrl?: string;
-	/** Fired by the ★ in the marker box; the route owns the stored list. */
+	/** The route owns the stored list. */
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
-	/** The URL's view segment (/where/orgs → "orgs"); null on bare /where. Lights the people/tree slot. */
+	/** The URL's view segment; null on bare /where. */
 	view?: WhereView | null;
-	/** Where the view links are built from — the child's own route, so a host never has to say. */
 	basePath?: string;
 } = $props();
 
-/** Bundler can't rewrite the bitmap href inside a raw-injected SVG ({@html}), so the placeholder path is replaced manually — both href and legacy xlink:href. */
+/** The bundler can't rewrite a bitmap href inside a raw-injected SVG. */
 const photoFrameSvg = photoFrameRaw.replaceAll(
 	"/pub-Rtvr/where/around-me-photo.webp",
 	aroundMePhoto,
@@ -80,23 +76,19 @@ let map: import("mapbox-gl").Map | null = $state(null);
 let selectedFeature: any = $state(null);
 let drawIntent: "polygon" | "line" | null = $state(null);
 let drawApi: WhereDrawControls | undefined = $state();
-/** Instance handle for WhereMap.resetView() — it owns the home camera. */
 let mapApi: WhereMap | undefined = $state();
-/** Set by WhereMap once the camera has zoomed/rotated away from home. */
 let viewChanged = $state(false);
 
-// Deliberately a const, not $state — its only writer (the fullscreen toggle) was removed; the {#if} stays so restoring a toggle is a one-line change.
 const toolsVisible = true;
-/** Closed on load — do not flip to `true`; it used to open itself on every visit and nag users for location permission. */
+/** Never `true` on load: it would nag for location permission on every visit. */
 let aroundMeOpen = $state(false);
 let favouritesOpen = $state(false);
 let areaQuery = $state("");
 let aroundMeStatus = $state("");
 
-/** Last known browser fix — draws the blue dot and lets Around Me skip re-asking once set. */
 let userLocation = $state<[number, number] | null>(null);
 
-/** Do NOT cache a coordinate across reloads (a stale fix lies about location) — instead check permissions.query; if already granted, getCurrentPosition resolves silently with no prompt. */
+/** Never cache a fix across reloads (stale fixes lie); if permission is already granted, getCurrentPosition resolves with no prompt. */
 $effect(() => {
 	if (typeof navigator === "undefined" || !navigator.geolocation) return;
 	if (!navigator.permissions?.query) return;
@@ -110,21 +102,17 @@ $effect(() => {
 					if (cancelled) return;
 					userLocation = [pos.coords.longitude, pos.coords.latitude];
 				},
-				() => {
-					/* Granted but no fix right now — the dot just stays off. */
-				},
+				() => {},
 				{ enableHighAccuracy: false, timeout: 10000 },
 			);
 		})
-		.catch(() => {
-			/* Permissions API unavailable — fall back to asking on demand. */
-		});
+		.catch(() => {});
 	return () => {
 		cancelled = true;
 	};
 });
 
-/** Instance method, not a slot: the trash tool was cut and nothing on the panel owns "clear" yet (docs/WHERE_TODO.md). */
+/** Nothing on the panel owns "clear" yet (docs/WHERE_TODO.md). */
 export function clearDrawings() {
 	drawApi?.clearAll();
 	onFeaturesCleared?.();
@@ -136,19 +124,17 @@ function pickDrawTool(mode: "polygon") {
 	drawApi?.setMode(mode);
 }
 
-/** People/tree are links, not buttons: same view again → bare basePath. Query and hash ride along so a ?land= deep link and the camera survive the toggle. */
+/** Same view again → bare basePath. Query and hash ride along so a deep link and the camera survive. */
 function viewHref(target: WhereView): string {
 	const path = view === target ? basePath : `${basePath}/${target}`;
 	return `${path}${$page.url.search}${$page.url.hash}`;
 }
 
-/** Same soft-limit elastic as the wheel — safeEase refuses non-finite zoom and mapInit's zoomend snaps back past the overshoot. */
 function zoomBy(delta: number) {
 	if (!map) return;
 	safeEase(map, { zoom: map.getZoom() + delta, duration: 320 });
 }
 
-// Basemap cycles natural → streets → satellite on each tap; starts on whatever the map booted with.
 let styleIdx = $state(
 	Math.max(
 		0,
@@ -165,7 +151,7 @@ function cycleStyle() {
 	map.setStyle(defaultStyleOptions[styleIdx].styleUrl);
 }
 
-/** Once location is granted, a second press flies to it instead of re-asking — the popup only appears while there's still something to ask. */
+/** Once located, a second press flies there instead of re-asking. */
 function toggleAroundMe() {
 	favouritesOpen = false;
 	aroundMeStatus = "";
@@ -177,7 +163,6 @@ function toggleAroundMe() {
 	aroundMeOpen = !aroundMeOpen;
 }
 
-/** Centre on the stored fix. Only ever called once `userLocation` is set. */
 function flyToUser() {
 	if (!map || !userLocation) return;
 	safeEase(map, { center: userLocation, zoom: 9, duration: 1600 });
@@ -188,7 +173,7 @@ function toggleFavouritesPanel() {
 	favouritesOpen = !favouritesOpen;
 }
 
-/** Back to the globe: WhereMap owns the camera reset, this just closes popups. Drawn shapes are deliberately NOT cleared here — that's the trash tool's job. */
+/** Drawn shapes are deliberately not cleared here. */
 function resetView() {
 	aroundMeOpen = false;
 	favouritesOpen = false;
@@ -203,7 +188,6 @@ function allowLocation() {
 	aroundMeStatus = "Locating…";
 	navigator.geolocation.getCurrentPosition(
 		(pos) => {
-			// Store BEFORE flying — this paints the blue dot and is the flag that stops the popup asking again.
 			userLocation = [pos.coords.longitude, pos.coords.latitude];
 			flyToUser();
 			aroundMeOpen = false;
@@ -222,9 +206,8 @@ async function searchArea(event: SubmitEvent) {
 	if (!map || !q) return;
 	aroundMeStatus = "Searching…";
 	try {
-		// Same token the map itself boots with (mapInit.ts).
 		const token = import.meta.env.VITE_MAPBOX_TOKEN;
-		// Checked explicitly rather than left to interpolate `undefined` — that built a silently-broken URL (401) whose catch message misleadingly reads as a network blip, not a missing token.
+		// An interpolated `undefined` builds a 401 URL whose catch reads as a network blip.
 		if (!token) {
 			aroundMeStatus =
 				"VITE_MAPBOX_TOKEN is not set — add it to rapper/.env and restart.";
@@ -260,7 +243,7 @@ async function searchArea(event: SubmitEvent) {
 	}
 }
 
-// centroid may be a parsed object or a JSON string (Mapbox serializes feature properties) — same tolerance as WhereMap's flyToAndSelect.
+// centroid may be a JSON string: Mapbox serializes feature properties.
 function featureLngLat(f: any): [number, number] | null {
 	let raw: unknown = null;
 	if (f?.geometry?.coordinates) raw = f.geometry.coordinates;
@@ -305,14 +288,13 @@ function formatHectares(hectares: number): string {
 	return Math.round(hectares).toLocaleString();
 }
 
-/** Where the marker panel's project links point — that project's results page; land rows use it too. Falls back to the search page when there's no projectKey. */
 let detailsHref = $derived(
 	selectedFeature?.projectKey && routes.whatProject
 		? routes.whatProject(selectedFeature.projectKey)
 		: (routes.what ?? null),
 );
 
-/** The organization's results page — null (not a fallback) when there's no organizationKey, since an org-labelled link to an unfiltered list is worse than no link. */
+/** null, not a fallback: an org-labelled link to an unfiltered list is worse than no link. */
 let orgHref = $derived(
 	selectedFeature?.organizationKey && routes.whoOrg
 		? routes.whoOrg(selectedFeature.organizationKey)
@@ -332,7 +314,6 @@ let orgHref = $derived(
 		{polygonsUrl}
 	/>
 
-	<!-- Draw engine: sources + in-progress popover only; the tool panel drives it via the exported instance API. -->
 	<WhereDrawControls
 		bind:this={drawApi}
 		map={map ?? undefined}
@@ -341,7 +322,6 @@ let orgHref = $derived(
 		{initialFeatures}
 	/>
 
-	<!-- Gold page border -->
 	<div class="gold-border" aria-hidden="true">
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html goldBorderRaw}
@@ -397,7 +377,6 @@ let orgHref = $derived(
 			</button>
 		</div>
 
-		<!-- Zoom lives on the RIGHT in the same slot art (mirrored), replacing Mapbox's top-left stack. -->
 		<div class="zoom-panel">
 			<div class="tool-panel-bg" aria-hidden="true">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -423,7 +402,6 @@ let orgHref = $derived(
 			</button>
 		</div>
 
-		<!-- Around Me sits alone bottom-right, round like the reset button — the dog is a place to go, not a tool. -->
 		<button
 			type="button"
 			class="around-btn"
@@ -435,7 +413,7 @@ let orgHref = $derived(
 			<span class="tool-tip tool-tip-left">Around Me</span>
 		</button>
 
-		<!-- Reset view sits below the tool panel, not inside it — the panel art is five fixed cutouts; a sixth button would fall off the slant. Only shows once there's something to undo. -->
+		<!-- Below the panel, not inside it: the panel art is five fixed cutouts. -->
 		{#if viewChanged || selectedFeature}
 			<button
 				type="button"
@@ -586,7 +564,6 @@ let orgHref = $derived(
 						<dt>Organization:</dt>
 						<dd>
 							{#if orgHref}
-								<!-- Key present but name missing is rare and real — the key is at least an identifier, never an empty link. -->
 								<a href={orgHref}>
 									{selectedFeature.organizationName ?? selectedFeature.organizationKey}
 								</a>
@@ -622,11 +599,10 @@ let orgHref = $derived(
 
 <style>
 	.where-stage {
-		/* Container for `cqw` units — sized against this box (not viewport) so the cutout controls track it; `size` not `inline-size` since both axes matter. */
 		container-type: size;
 		container-name: where-stage;
 		position: relative;
-		height: calc(100vh - 5rem); /* navbar is h-20 (5rem) sticky */
+		height: calc(100vh - 5rem); /* navbar is h-20 sticky */
 		width: 100%;
 		background: #000;
 		overflow: hidden;
@@ -645,12 +621,11 @@ let orgHref = $derived(
 		display: block;
 	}
 
-	/* Designed chrome replaces Mapbox's default zoom/compass/style controls — the gold border's panel cutout is where they'd sit. */
 	.where-stage :global(.mapboxgl-ctrl-top-left) {
 		display: none;
 	}
 
-	/* Sized in stage percentages to track the gold border's left cutout (x 0.5%–10.4%, y 11.5%–68%); definite height matters since the five flex rows divide it evenly. */
+	/* Stage percentages track the gold border's left cutout (x 0.5%–10.4%, y 11.5%–68%). */
 	.tool-panel {
 		position: absolute;
 		left: 0.8%;
@@ -661,7 +636,7 @@ let orgHref = $derived(
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
-		/* No padding: percentage padding resolves against the STAGE width, and even 1.5% of it pushed row one 14px below its cutout and row five 12px above. The five equal rows match the art's five slots within 2% only when they span the full box. */
+		/* Any padding shifts the five rows off the art's five slots. */
 		padding: 0;
 		box-sizing: border-box;
 	}
@@ -682,12 +657,10 @@ let orgHref = $derived(
 		display: block;
 	}
 
-	/* Mirror of .tool-panel on the right edge: two slots, art rises toward the screen edge. */
 	.zoom-panel {
 		position: absolute;
 		right: 0.8%;
 		top: 7%;
-		/* Two-thirds of the left panel's slot size — zoom is a smaller control than a tool. */
 		width: 5.9%;
 		height: 13%;
 		min-width: 38px;
@@ -701,10 +674,9 @@ let orgHref = $derived(
 	.tool-btn {
 		position: relative;
 		flex: 1;
-		/* Two slots are <a>, three are <button> — one look for both. */
 		text-decoration: none;
 		color: inherit;
-		/* Without this, icons' intrinsic size becomes the flex minimum and the column blows past the panel instead of splitting evenly. */
+		/* Otherwise icon intrinsic size becomes the flex minimum and the column overflows. */
 		min-height: 0;
 		background: none;
 		border: none;
@@ -724,7 +696,6 @@ let orgHref = $derived(
 		transition: filter 0.15s ease;
 	}
 
-	/* The webp tools are drawn light; the SVGs and the tree are pure white — pulled to the same weight per icon, not per slot. */
 	.tool-btn .icon-people {
 		height: 50%;
 	}
@@ -737,19 +708,18 @@ let orgHref = $derived(
 		height: 50%;
 	}
 
-	/* Big glyph in a small slot — the +/− are the whole point of the slot. */
 	.tool-btn .icon-zoom {
 		height: 64%;
 		max-width: 80%;
 	}
 
-	/* Right-side tips open leftward so they don't fall off the screen. Two classes so it outranks .tool-tip's `left`, declared later in this file. */
+	/* Two classes so it outranks .tool-tip's `left`, declared later. */
 	.tool-tip.tool-tip-left {
 		left: auto;
 		right: calc(100% + 10px);
 	}
 
-	/* Same family as .reset-btn; bottom-right, clear of the gold border's corner notch (x ≥ 89%, y ≥ 92%). */
+	/* Clear of the gold border's corner notch (x ≥ 89%, y ≥ 92%). */
 	.around-btn {
 		position: absolute;
 		right: 3.2%;
@@ -798,7 +768,6 @@ let orgHref = $derived(
 		filter: drop-shadow(0 0 6px #fad702) drop-shadow(0 0 2px #fad702);
 	}
 
-	/* Hover-reveal icon descriptions (per the design annotation). */
 	.tool-tip {
 		position: absolute;
 		left: calc(100% + 10px);
@@ -824,10 +793,9 @@ let orgHref = $derived(
 		opacity: 1;
 	}
 
-	/* Aligned to the tool panel's column, parked just below it (still inside the cutout, y ≤ 68%); round so it reads as a separate control, not a sixth slot. */
 	.reset-btn {
 		position: absolute;
-		/* Centred on the tool panel's column (left 0.8% + half its 8.8%) so it tracks the panel at any width — a fixed circle would blow up on a wide monitor. */
+		/* Centred on the tool panel's column (left 0.8% + half its 8.8%). */
 		left: 5.2%;
 		top: 59%;
 		transform: translateX(-50%);
@@ -859,14 +827,12 @@ let orgHref = $derived(
 	.reset-glyph {
 		font-size: clamp(1.15rem, 1.7vw, 1.6rem);
 		line-height: 1;
-		/* the ⟲ glyph sits high in its em box */
 		transform: translateY(-1px);
 	}
 
 	@keyframes resetFadeIn {
 		from {
 			opacity: 0;
-			/* keeps the centring translate — a bare scale() would drop it */
 			transform: translateX(-50%) scale(0.85);
 		}
 	}
@@ -901,7 +867,6 @@ let orgHref = $derived(
 		filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.55));
 	}
 
-	/* Window bg is absolutely positioned, so content underneath needs position:relative or it paints below it. */
 	.around-photo {
 		position: relative;
 		width: 92%;
@@ -936,7 +901,6 @@ let orgHref = $derived(
 		font-size: clamp(1.05rem, 1.4vw, 1.35rem);
 		padding: 0.3em 1.5em;
 		cursor: pointer;
-		/* subtle hand-cut trapezoid, per the Allow asset */
 		transform: rotate(-0.6deg) skewX(-1.2deg);
 		transition:
 			background 0.15s ease,
@@ -971,8 +935,6 @@ let orgHref = $derived(
 		width: 138%;
 		max-width: 78vw;
 		aspect-ratio: 344.55581 / 81.82171;
-		/* overlaps the window's (empty) lower portion so the bar sits right
-		   under the "narrow search" line, as in the layout reference */
 		margin-top: -30%;
 	}
 
@@ -1256,7 +1218,6 @@ let orgHref = $derived(
 		}
 
 		.reset-btn {
-			/* mobile panel is left 4px / 54px wide — centre on 31px */
 			left: 31px;
 			top: 60%;
 			width: 44px;

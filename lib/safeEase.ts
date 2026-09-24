@@ -1,17 +1,11 @@
 import type * as mapboxgl from "mapbox-gl";
 import type { Coord } from "./coord";
 
-// mapbox-gl 3.x globe projection has an internal recursion in
-// setLocationAtPoint → set center → _updateZoomFromElevation that any animated
-// easeTo/flyTo triggers per-frame, blowing the stack. jumpTo skips
-// setLocationAtPoint entirely. This helper interpolates with rAF + jumpTo when
-// the map is on globe, and falls back to native easeTo on mercator.
+// On mapbox-gl 3.x globe, any animated easeTo/flyTo recurses through
+// setLocationAtPoint → _updateZoomFromElevation and blows the stack; rAF +
+// jumpTo sidesteps it. Mercator falls back to native easeTo.
 
 export type SafeEaseOptions = {
-    // Coord is the branded, validated tuple — `readonly [number, number]
-    // & brand`. Listed first so callers passing the result of toCoord()
-    // typecheck without casts. The raw tuple/LngLatLike paths stay for
-    // back-compat with existing call sites that have not migrated.
     center?: Coord | [number, number] | mapboxgl.LngLatLike;
     zoom?: number;
     duration?: number;
@@ -38,15 +32,13 @@ function toLngLat(c: SafeEaseOptions["center"]): [number, number] | null {
     return null;
 }
 
-// Shortest signed delta on the longitude axis (handles antimeridian wrap).
+// Shortest signed delta across the antimeridian; exact 180 goes eastward.
 function shortestLngDelta(from: number, to: number): number {
     let d = ((to - from + 540) % 360) - 180;
-    // Handle exact 180 case deterministically (eastward).
     if (d === -180) d = 180;
     return d;
 }
 
-// Cubic ease-out — feels close to mapbox default.
 function easeOutCubic(t: number): number {
     return 1 - (1 - t) ** 3;
 }
@@ -55,11 +47,6 @@ export function safeEase(
     map: mapboxgl.Map,
     opts: SafeEaseOptions,
 ): void {
-    // safeEase is the globe-projection sibling of safeMap.ts's wrappers,
-    // and like them it must NEVER let a non-finite value reach the Mapbox
-    // camera: a NaN zoom or center corrupts the transform and the map
-    // renders blank white (the pin create/edit white-out). Validate every
-    // input up front and bail loudly — never animate toward garbage.
     if (opts.zoom !== undefined && !Number.isFinite(opts.zoom)) {
         console.warn("[safeEase] rejected: zoom is not finite");
         return;
@@ -96,9 +83,7 @@ export function safeEase(
     const startLat = startCenter.lat;
     const startZoom = map.getZoom();
 
-    // The current camera is already corrupt — interpolating FROM a NaN
-    // only spreads it frame by frame. Bail; the health watchdog in
-    // mapInit.ts restores a finite camera.
+    // Interpolating from a NaN only spreads it; mapInit's watchdog restores the camera.
     if (
         !Number.isFinite(startLng) ||
         !Number.isFinite(startLat) ||
@@ -139,7 +124,6 @@ export function safeEase(
             activeRaf.set(map, id);
         } else {
             activeRaf.delete(map);
-            // jumpTo already fires moveend/zoomend; don't double-fire.
         }
     }
 

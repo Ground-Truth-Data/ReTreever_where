@@ -1,43 +1,15 @@
-// Area-name label placement — the "short handle on a priority budget"
-// convention (design handoff: design_handoff_area_names).
-//
-// Direct port of the handoff's dependency-free `label-placement.js`. Pure —
-// no DOM, no Mapbox. The caller supplies a projection and a text measurer
-// and gets back, per area, whether to draw a LABEL (chip), a DOT, or
-// nothing, and where. areaLabels.ts is the renderer that consumes this.
-//
-// The three rules:
-//   1. A name is ONE LINE, never a paragraph — the map shows a short
-//      handle (displayName, or deriveHandle(fullName) as the suggestion),
-//      capped at HANDLE_MAX_W. The full name lives in the tap popover.
-//   2. Labels are a BUDGET, placed by priority — highest score first; a
-//      label draws only if its box clears every box already placed.
-//      Losers collapse to a dot. The selected area always keeps its label.
-//   3. ZOOM sets the budget — no explicit cap; zooming out packs the
-//      centroids, more boxes collide, fewer labels survive. Re-run on
-//      zoom / data / selection change.
-//   4. DECISIONS ARE STICKY. The pass runs on every camera frame, so a
-//      stateless answer makes borderline pairs flip chip↔dot continuously —
-//      the label set chatters. Pass `previous` and an incumbent both sorts
-//      ahead of its challengers and tolerates HYSTERESIS_PX2 of overlap
-//      before it is evicted.
+// Area-name label placement, pure (no DOM, no Mapbox). Labels are a budget
+// placed by priority; losers collapse to a dot; zoom sets the budget. Decisions
+// are sticky: pass `previous` and an incumbent sorts first and tolerates
+// HYSTERESIS_PX2 of overlap, or borderline pairs chatter every camera frame.
 
-/* ---- tunables (match the handoff design tokens) -------------------- */
-// ⚠️ These MIRROR the .area-chip CSS in areaLabels.ts — font-size, max-width and
-// horizontal padding. Change one without the other and the layout reserves boxes
-// that don't match the chips it is placing: too wide hides labels that would have
-// fit, too narrow lets them overlap.
-const HANDLE_PX = 12; // label font size used for measuring
-const HANDLE_MAX_W = 170; // one-line handle cap (px) — enforces Rule 1
-const CHIP_PAD_X = 9; // horizontal chip padding each side adds to width
-const BOX_PAD = 4; // extra slop added around each reserved box
-const OVERLAP_SLOP = 4; // px² overlap below this is treated as "clear"
-const DOT_BOX = 30; // reserved footprint for a collapsed dot (px)
-// Rule 4's deadband. A chip that already won keeps winning until it overlaps by
-// more than this; a chip that lost must clear by this margin before it returns.
-// Without it the pass is a stateless decision on a continuously-varying input,
-// and every zoom frame re-answers a borderline pair differently — the label set
-// visibly chatters. Any thermostat needs a deadband; so does this.
+// Keep in sync with the .area-chip CSS in areaLabels.ts (font-size, max-width, padding).
+const HANDLE_PX = 12;
+const HANDLE_MAX_W = 170;
+const CHIP_PAD_X = 9;
+const BOX_PAD = 4;
+const OVERLAP_SLOP = 4;
+const DOT_BOX = 30;
 const HYSTERESIS_PX2 = 900;
 
 export type PrioMode = "both" | "big" | "recent";
@@ -48,8 +20,7 @@ export interface LabelArea {
 	/** Short handle. Falls back to deriveHandle(fullName) when empty. */
 	displayName?: string;
 	hectares: number;
-	/** Days since last touch — recency input to the score. Pass 0 for all
-	 *  when unknown; the score then orders purely by size. */
+	/** Pass 0 for all when unknown; the score then orders purely by size. */
 	visitedDaysAgo: number;
 }
 
@@ -69,27 +40,20 @@ export interface LayoutOpts {
 	project: (area: LabelArea) => { x: number; y: number };
 	/** Text width in px with the label font set at `px`. */
 	measureText: (text: string, px: number) => number;
-	/** Last pass's decision per id — the hysteresis input (Rule 4). Omit on a
-	 *  cold pass. */
+	/** Last pass's decision per id; omit on a cold pass. */
 	previous?: ReadonlyMap<string, LabelDecision["kind"]>;
 }
 
-/**
- * Rule 1 helper — derive a short, editable handle from a long free-text
- * name. A *suggestion* prefilled into an editable field at save time; the
- * full name is never lost. Never silently final.
- */
 const FILLER = /^(blk|block|mini|pile|restor|restoration)$/i;
+/** A short handle suggestion from a long free-text name. */
 export function deriveHandle(fullName: string): string {
-	// An auto-generated name is "<date><kind>_<user>" — the kind word sits AFTER
-	// the date, so anchoring this at the start never matched the names the app
-	// actually mints and "polygon" survived into every label.
+	// An auto-generated name is "<date><kind>_<user>": the kind word sits after the date.
 	const s = String(fullName)
 		.trim()
 		.replace(/(^|\d)(polygon|line|point|track)[_\s-]*/i, "$1");
 	const words = s.split(/[\s_]+/).filter((w) => w && !FILLER.test(w));
-	const handle = words.slice(0, 2).join(" "); // first 1–2 meaningful words
-	return handle || fullName; // never return empty
+	const handle = words.slice(0, 2).join(" ");
+	return handle || fullName;
 }
 
 interface Stats {
@@ -98,20 +62,16 @@ interface Stats {
 	maxVisited: number;
 }
 
-/**
- * Rule 2 helper — priority score. Higher = placed first = keeps its label.
- * mode: 'both' (recent + big, recommended) | 'big' | 'recent'
- */
+/** Priority score: higher is placed first and keeps its label. */
 export function score(area: LabelArea, mode: PrioMode, stats: Stats): number {
 	const vSpan = stats.maxVisited - stats.minVisited || 1;
 	const recency = (stats.maxVisited - area.visitedDaysAgo) / vSpan;
 	const size = area.hectares / (stats.maxHectares || 1);
 	if (mode === "big") return size;
 	if (mode === "recent") return recency;
-	return 0.5 * recency + 0.5 * size; // "recent + big"
+	return 0.5 * recency + 0.5 * size;
 }
 
-/* ---- geometry ------------------------------------------------------- */
 export type PlacedBox = { x0: number; y0: number; x1: number; y1: number };
 
 function overlapArea(a: PlacedBox, b: PlacedBox): number {
@@ -120,10 +80,7 @@ function overlapArea(a: PlacedBox, b: PlacedBox): number {
 	return ox * oy;
 }
 
-/** True when `box` meaningfully overlaps any reserved box. Exported so the
- *  renderer can run follow-on tiers (track labels) against the same
- *  reserved space with identical semantics. `slop` raises the bar for a box
- *  that already held its place last pass (Rule 4). */
+/** Exported so the renderer can run follow-on tiers against the same reserved space. */
 export function collidesWithPlaced(
 	box: PlacedBox,
 	placed: PlacedBox[],
@@ -134,16 +91,11 @@ export function collidesWithPlaced(
 
 export interface LayoutResult {
 	decisions: LabelDecision[];
-	/** Every reserved footprint (labels + dots), for follow-on tiers. */
+	/** Every reserved footprint, for follow-on tiers. */
 	placed: PlacedBox[];
 }
 
-/**
- * The placement pass. Places labels highest-priority-first; a label only
- * draws if its bounding box clears every box already placed. Losers collapse
- * to a dot (or hide). The selected area is forced first and always keeps
- * its label.
- */
+/** Highest priority first; the selected area is forced and always keeps its label. */
 export function layoutLabels(
 	areas: LabelArea[],
 	opts: LayoutOpts,
@@ -158,16 +110,14 @@ export function layoutLabels(
 	} = opts;
 	if (areas.length === 0) return { decisions: [], placed: [] };
 
-	// per-frame stats across the set
 	const stats: Stats = {
 		maxHectares: Math.max(...areas.map((a) => a.hectares)),
 		minVisited: Math.min(...areas.map((a) => a.visitedDaysAgo)),
 		maxVisited: Math.max(...areas.map((a) => a.visitedDaysAgo)),
 	};
 
-	// priority order — selected first, then whoever ALREADY holds a chip, then
-	// score desc. Incumbency is part of Rule 4: re-ordering the queue every frame
-	// would hand the space to a different winner even with a deadband in place.
+	// Selected, then incumbents, then score: re-ordering every frame would hand
+	// the space to a different winner even with the deadband.
 	const order = [...areas].sort((a, b) => {
 		if (a.id === selectedId) return -1;
 		if (b.id === selectedId) return 1;
@@ -184,7 +134,6 @@ export function layoutLabels(
 		const { x, y } = project(area);
 		const forced = area.id === selectedId;
 
-		// Rule 1: one line, capped width. Measure the handle, never the full name.
 		const text = area.displayName || deriveHandle(area.fullName);
 		const w =
 			Math.min(HANDLE_MAX_W, measureText(text, HANDLE_PX)) + CHIP_PAD_X * 2;
@@ -196,9 +145,6 @@ export function layoutLabels(
 			x1: x + w / 2 + BOX_PAD,
 			y1: y + h / 2 + BOX_PAD,
 		};
-		// Rule 4: an incumbent tolerates more overlap before being evicted than a
-		// challenger needs to win the slot. The gap between the two thresholds is
-		// the deadband that stops borderline pairs chattering.
 		const held = previous?.get(area.id) === "label";
 		const collides = collidesWithPlaced(
 			box,
@@ -208,12 +154,12 @@ export function layoutLabels(
 
 		if (forced || !collides) {
 			decisions.push({ id: area.id, kind: "label", x, y, text });
-			placed.push(box); // reserve the label's footprint
+			placed.push(box);
 		} else if (collapseLosersToDot) {
 			decisions.push({ id: area.id, kind: "dot", x, y, text });
 			placed.push({
 				x0: x - DOT_BOX / 2,
-				y0: y - DOT_BOX / 2, // reserve the dot's footprint
+				y0: y - DOT_BOX / 2,
 				x1: x + DOT_BOX / 2,
 				y1: y + DOT_BOX / 2,
 			});

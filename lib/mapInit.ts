@@ -20,15 +20,7 @@ import { isCoord } from "./coord";
 
 const defaultSatStyle = MAP_CONFIG.styles.defaultSat;
 
-/**
- * `true` so Sentry's replayCanvasIntegration (hooks.client.ts) can snapshot
- * the map; `false` (Mapbox's default) records maps blank in session replays.
- * One switch for BOTH maps (online + offlinev4) — they share this initializer.
- *
- * Measured 2026-08-11: flipping to false was INCONCLUSIVE — run-to-run
- * variance on this route (±100–200 MB) exceeds the effect being tested, and
- * an unproven win is not worth the known replay cost. See MEMORY_FINDINGS.md.
- */
+// `true` so Sentry's replay can snapshot the canvas; `false` records maps blank.
 const MAP_PRESERVE_DRAWING_BUFFER = true;
 
 function startRotation(
@@ -40,14 +32,11 @@ function startRotation(
         options.rotationSpeed ?? MAP_CONFIG.globe.rotationSpeed;
     const maxSpinZoom = MAP_CONFIG.globe.maxSpinZoom;
 
-    // Manual rAF spin instead of easeTo. mapbox 3.x globe projection has an
-    // internal recursion in setLocationAtPoint → set center →
-    // _updateZoomFromElevation that easeTo triggers on every per-frame update.
-    // jumpTo skips setLocationAtPoint entirely and just sets center, so no
-    // elevation anchor recompute, no stack overflow.
+    // rAF + jumpTo, not easeTo: on mapbox 3.x globe, easeTo recurses through
+    // setLocationAtPoint → _updateZoomFromElevation and blows the stack.
     let raf = 0;
     let lastT = 0;
-    // Latch so a corrupt camera is reset once, not every frame.
+    // Reset a corrupt camera once, not every frame.
     let cameraRecovered = false;
 
     function step(t: number) {
@@ -55,12 +44,8 @@ function startRotation(
         const dt = lastT ? Math.min((t - lastT) / 1000, 0.1) : 0;
         lastT = t;
 
-        // The spin yields to any camera the user is driving. Ask Mapbox —
-        // isMoving/isZooming/isRotating cover every camera change it drives,
-        // including gestures an enumerated event list misses (pinch's first
-        // touchend, wheel zoom — both once let this loop re-assert zoom every
-        // frame and swallow the user's input). The ref survives only as a
-        // manual OVERRIDE: mousedown holds the globe still before a click.
+        // isMoving/isZooming/isRotating cover gestures an event list misses
+        // (pinch's first touchend, wheel zoom); the ref is only the mousedown override.
         const userDrivingCamera =
             userInteractingRef.current ||
             map.isMoving() ||
@@ -73,16 +58,13 @@ function startRotation(
                 Number.isFinite(center.lng) && Number.isFinite(center.lat);
 
             if (centerOk) {
-                cameraRecovered = false; // healthy — re-arm recovery
+                cameraRecovered = false;
                 center.lng -= degreesPerSecond * dt;
                 safeJumpTo(map, {
                     center: [center.lng, center.lat],
                     zoom: map.getZoom(),
                 });
             } else if (!cameraRecovered) {
-                // Corrupt camera (NaN center): without the latch this re-reads
-                // the NaN every frame and spams safeJumpTo's rejection ~60×/s.
-                // Reset once; the next frame sees a finite center and resumes.
                 cameraRecovered = true;
                 const fallback = options.initialCenter;
                 safeJumpTo(map, {
@@ -108,10 +90,7 @@ function startRotation(
     });
 }
 
-/**
- * Initialize a Mapbox map (compactGlobeOptions for the hero globe).
- * Returns a cleanup function that removes the map.
- */
+/** Returns a cleanup function that removes the map. */
 export function initializeMap(
     container: HTMLDivElement,
     options: MapOptions = {},
@@ -129,10 +108,6 @@ export function initializeMap(
     }
 
     if (!mapboxAccessToken) {
-        // Name a file the reader actually has. Mounted by a parent the token
-        // comes from that parent's .env; cloned alone it comes from this
-        // repo's. Naming only rapper's sent a standalone developer looking
-        // for a directory their checkout does not contain.
         const name = "VITE_MAPBOX_TOKEN";
         const msg =
             `${name} is not set, so no map can be created.\n` +
@@ -141,8 +116,7 @@ export function initializeMap(
             `Free tokens: https://account.mapbox.com/access-tokens/`;
         console.error(msg);
 
-        // Painted into the container — a blank rectangle reads as "broken",
-        // not "unconfigured". textContent, not innerHTML: nothing can inject.
+        // A blank rectangle reads as "broken", not "unconfigured".
         const note = document.createElement("div");
         note.style.cssText =
             "padding:1rem;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;" +
@@ -152,7 +126,6 @@ export function initializeMap(
         container.appendChild(note);
 
         return () => {
-            // Otherwise a re-init stacks a second copy.
             note.remove();
         };
     }
@@ -161,10 +134,8 @@ export function initializeMap(
 
     const userInteractingRef = { current: false };
 
-    // parseMapHash can return garbage; callers can pass a stale-store camera
-    // carrying NaN. The watchdog below recovers AFTER the fact, but mapbox's
-    // mousemove handler can throw "Invalid LngLat object: (NaN, NaN)" on a
-    // degenerate transform first — validate so the transform is born finite.
+    // The transform must be born finite: mapbox's mousemove handler throws on a
+    // NaN camera before the watchdog below can repair it.
     const safeCenter: [number, number] = isCoord(opts.initialCenter)
         ? ([opts.initialCenter[0], opts.initialCenter[1]] as [number, number])
         : ([
@@ -188,16 +159,12 @@ export function initializeMap(
     const map = new mapboxgl.Map({
         container,
         style: opts.style || defaultSatStyle,
-        // Optional request rewriter/blocker (air-gapped offline maps pass a guard
-        // that rejects every non-local URL — see /mobile/offlinev4).
         ...(opts.transformRequest
             ? { transformRequest: opts.transformRequest }
             : {}),
         hash: false,
-        // Both credit controls are placed ONCE, at construction — no API to
-        // move them later, and CSS only ever moves their whole corner
-        // container. `logoPosition` moves the wordmark; the attribution has
-        // no equivalent, so it's disabled here and re-added by hand below.
+        // Credit controls can't be moved after construction; the attribution has
+        // no logoPosition equivalent, so it's re-added by hand below.
         ...(opts.creditsSplit
             ? {
                   logoPosition: "bottom-right" as const,
@@ -213,32 +180,21 @@ export function initializeMap(
         preserveDrawingBuffer: MAP_PRESERVE_DRAWING_BUFFER,
     });
 
-    // Guard the geojson worker-callback crash path (SourceCache.update →
-    // Transform.coveringTiles) — patches the shared Transform prototype off
-    // this live instance. Must come right after construction so a source
-    // 'data' event landing during a degenerate-camera window can't throw.
+    // Right after construction, before any source 'data' event can land.
     installCoveringTilesGuard(map);
 
-    // Dev-only QA handle: lets browser-automation sessions aim the camera
-    // (jumpTo/querySourceFeatures) without synthetic-gesture flailing.
+    // Browser-automation handle for aiming the camera.
     if (import.meta.env.DEV) {
         (window as unknown as Record<string, unknown>).__rtMap = map;
     }
 
-    // Construction-time handle — fires BEFORE the style loads (onMapReady
-    // waits for `load`, which can hang on a weak connection). See MapOptions.
     opts.onMapCreated?.(map);
 
-    // Lock to top-down view.
     map.dragRotate.disable();
     map.touchZoomRotate.disableRotation();
 
-    // ── WebGL context recovery (iOS WebView) ────────────────────────────
-    // iOS WebKit reclaims a WebView's GL context under memory pressure or a
-    // heavy reflow (popover, software keyboard); mapbox-gl never rebuilds it,
-    // and the browser only sends `webglcontextrestored` if the loss was
-    // preventDefault'd — do that, then resize + repaint so tiles redraw.
-    // Desktop effectively never fires these; only native iOS reproduces it.
+    // iOS WebKit reclaims the GL context under memory pressure and mapbox-gl
+    // never rebuilds it; `webglcontextrestored` only fires if the loss was preventDefault'd.
     const glCanvas = map.getCanvas();
     const onContextLost = (e: Event) => {
         e.preventDefault();
@@ -252,16 +208,10 @@ export function initializeMap(
     glCanvas.addEventListener("webglcontextlost", onContextLost, false);
     glCanvas.addEventListener("webglcontextrestored", onContextRestored, false);
 
-    // ── Camera / canvas health watchdog ─────────────────────────────────
-    // A pointer/resize event while the container is momentarily zero-sized
-    // (overlay popover, iOS keyboard) makes mapbox-gl's projection math
-    // divide by zero: a NaN camera or a 0×0 canvas, both blank white, never
-    // self-repaired — and startRotation's recovery path doesn't run on the
-    // non-rotating mobile work map. Re-check a few times a second and repair
-    // whichever degenerate state is found.
+    // A pointer/resize event while the container is momentarily 0×0 (popover,
+    // iOS keyboard) leaves a NaN camera or a 0×0 canvas that never self-repairs.
     let lastGoodCenter: [number, number] = safeCenter;
     let lastGoodZoom = safeZoom;
-    // Warn once per episode, not per 400ms tick.
     let unhealthySince: number | null = null;
     map.on("moveend", () => {
         const c = map.getCenter();
@@ -272,8 +222,6 @@ export function initializeMap(
         }
     });
     const healthWatchdog = window.setInterval(() => {
-        // Center OR zoom non-finite: a NaN zoom from an animation started
-        // with garbage makes unproject return NaN and the map never draws.
         let cameraBad = false;
         try {
             const c = map.getCenter();
@@ -283,8 +231,6 @@ export function initializeMap(
                 !Number.isFinite(c.lat) ||
                 !Number.isFinite(z);
         } catch {
-            // getCenter()/getZoom() can themselves throw when the transform
-            // is fully degenerate — treat that as "bad" and recover.
             cameraBad = true;
         }
         const canvasEl = map.getCanvas();
@@ -299,7 +245,6 @@ export function initializeMap(
                     "[mapInit] camera transform degenerate — restoring last good view",
                 );
             }
-            // Cancels the in-flight NaN animation and pins the camera finite.
             safeJumpTo(map, { center: lastGoodCenter, zoom: lastGoodZoom });
         }
         if (cameraBad || canvasDead) {
@@ -314,9 +259,7 @@ export function initializeMap(
         }
     }, 400);
 
-    // Force terrain off. On globe projection, any DEM source causes mapbox-gl's
-    // setLocationAtPoint → set center → _updateZoomFromElevation → getAtPoint
-    // chain to recurse and blow the stack during animated easeTo (e.g. spin).
+    // On globe projection any DEM source makes animated easeTo recurse and blow the stack.
     map.on("style.load", () => {
         map.setTerrain(null);
     });
@@ -331,19 +274,14 @@ export function initializeMap(
     if (!opts.scrollZoom) {
         map.scrollZoom.disable();
     } else {
-        // Mapbox default (1/450) ≈ 1 zoom level per full trackpad swipe; at
-        // 1/60 a swipe ≈ 7–8 levels — globe to site in 2 gestures. Tiles
-        // lazy-load after the user settles.
+        // Mapbox default 1/450 ≈ 1 zoom level per trackpad swipe; 1/60 ≈ 7–8.
         map.scrollZoom.setWheelZoomRate(1 / 60);
         map.scrollZoom.setZoomRate(1 / 35);
     }
 
     if (opts.autoRotate) {
-        // mousedown must freeze the globe SYNCHRONOUSLY: the rAF step reads
-        // the ref next frame, so the already-scheduled frame still slides the
-        // world under a stationary cursor — and mapbox hit-tests at mouseup,
-        // so the click misses its target. map.stop() cancels the in-flight
-        // camera change on the spot.
+        // map.stop() freezes the globe synchronously; the rAF step alone would
+        // slide the world one more frame and the click would miss its target.
         map.on("mousedown", () => {
             userInteractingRef.current = true;
             map.stop();
@@ -354,11 +292,8 @@ export function initializeMap(
             opts.onUserInteractionEnd?.();
         });
 
-        // touchstart/touchend are NOT a balanced pair with multiple fingers
-        // down: the FIRST touchend arrives while the second finger is still
-        // pinching, and releasing then lets the spin loop fight the zoom.
-        // Only release when the LAST finger lifts — `originalEvent.touches`
-        // is the live count.
+        // The first touchend arrives while the second finger is still pinching;
+        // release only when the last finger lifts.
         map.on("touchstart", () => {
             userInteractingRef.current = true;
             map.stop();
@@ -369,9 +304,7 @@ export function initializeMap(
             userInteractingRef.current = false;
             opts.onUserInteractionEnd?.();
         });
-        // A cancelled touch (call, notification, browser gesture takeover)
-        // fires NO touchend. Without this the ref latches true and the globe
-        // never spins again for the rest of the session.
+        // A cancelled touch fires no touchend; without this the globe never spins again.
         map.on("touchcancel", () => {
             userInteractingRef.current = false;
             opts.onUserInteractionEnd?.();
@@ -387,11 +320,9 @@ export function initializeMap(
         });
     }
 
-    // Unified style.load handler — fog, natural overrides, label hiding.
-    // Fires on initial load AND after setStyle (style toggle).
+    // style.load fires after setStyle too, so the toggle re-applies these.
     if (opts.globeProjection || opts.hideLabels) {
         map.on("style.load", () => {
-            // ── Fog ────────────────────────────────────────────────────
             if (opts.globeProjection) {
                 if (opts.transparentBackground) {
                     map.setFog({
@@ -416,22 +347,17 @@ export function initializeMap(
                               },
                     );
 
-                    // ── Natural style overrides (only on dark-v11) ─────
                     if (isDark) {
                         applyNaturalOverrides(map);
                     }
                 }
             }
 
-            // ── Hide labels ────────────────────────────────────────────
-            // Natural overrides already hide all symbols, but this covers
-            // non-natural styles when hideLabels is explicitly on.
             if (opts.hideLabels) {
                 const layers = map.getStyle()?.layers || [];
                 const whitelist = opts.labelWhitelist ?? [];
                 for (const layer of layers) {
                     if (layer.type !== "symbol") continue;
-                    // Keep whitelisted layers visible (e.g. road-, settlement-)
                     const isWhitelisted =
                         whitelist.length > 0 &&
                         whitelist.some((prefix) => layer.id.startsWith(prefix));
@@ -454,10 +380,7 @@ export function initializeMap(
         });
     }
 
-    // Attribution re-added on the OTHER side from the wordmark (disabled in
-    // the constructor so it can be positioned; mapbox's terms require it to
-    // stay visible). `compact: false` keeps it a readable line rather than
-    // an (i) button at narrow widths.
+    // Mapbox's terms require the attribution visible; `compact: false` keeps it a line, not an (i) button.
     if (opts.creditsSplit) {
         map.addControl(
             new mapboxgl.AttributionControl({ compact: false }),
@@ -475,18 +398,13 @@ export function initializeMap(
             maxWidth: 160,
             unit: "metric",
         });
-        // /where opts into bottom-right so the scale joins the zoom readout
-        // and credits in one corner cluster, not stranded diagonally opposite.
         map.addControl(
             scaleControl,
             opts.cornerControlsBottomRight ? "bottom-right" : "bottom-left",
         );
     }
 
-    // ── Zoom readout ───────────────────────────────────────────────────
-    // Debug aid. Zoom decides spin, dog size and cluster splits; the URL
-    // hash only syncs above maxSpinZoom, so it's blank for the whole
-    // spinning range.
+    // Debug aid: the URL hash only syncs above maxSpinZoom.
     if (opts.showZoomReadout) {
         const readout = document.createElement("div");
         readout.className = "mapboxgl-ctrl rt-zoom-readout";
@@ -524,9 +442,7 @@ export function initializeMap(
         );
     }
 
-    // Elastic zoom: hard limits sit `overshoot` past the soft ones and
-    // zoomend eases back — the gesture visibly registers instead of
-    // hard-stopping (mapDocs.md).
+    // Elastic zoom: hard limits sit `overshoot` past the soft ones and zoomend eases back.
     const { softMin, softMax, overshoot, easeMs } = MAP_CONFIG.zoom;
     map.setMinZoom(softMin - overshoot);
     map.setMaxZoom(softMax + overshoot);
@@ -538,7 +454,6 @@ export function initializeMap(
 
     map.on("load", async () => {
         map.resize();
-        // Draw tools live in <MapDrawControls> on the page components.
         if (opts.autoRotate) startRotation(map, opts, userInteractingRef);
         opts.onMapReady?.(map);
     });
@@ -551,8 +466,5 @@ export function initializeMap(
     };
 }
 
-// Re-export config options for backward compatibility
 export { fullMapOptions, compactGlobeOptions };
-
-// Re-export types for backward compatibility
 export type { MapOptions, PolygonConfig } from "./mapTypes";

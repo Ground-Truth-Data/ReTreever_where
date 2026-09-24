@@ -1,7 +1,5 @@
-// Compact style switcher control - single button with dropdown
 import type * as mapboxgl from "mapbox-gl";
 
-// Folded map icon (matches Mapbox control style)
 const MAP_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffd700" style="width:60%;height:60%">
 	<path d="M15 3l6 3v15l-6-3-6 3-6-3V3l6 3 6-3zm-1 2.13l-4 2V19.1l4-2V5.13zm2 0v12l4 2V5.1l-4 2.03zM4 6.87v12l4-2V4.87l-4 2z"/>
 </svg>`;
@@ -65,11 +63,8 @@ class StyleToggleControl {
             const item = document.createElement("div");
             item.dataset.styleId = style.id;
             item.textContent = style.label;
-            // The space THIS control sits in, never the window: mounted in the
-            // desktop simulator the map is a phone-width column inside a wide
-            // window, and sizing off the window gives tablet padding on a 390px
-            // strip. Measured off our own container so the answer holds wherever
-            // the child is mounted, without naming the frame that surrounds it.
+            // Our own container, never the window: in the desktop simulator the
+            // map is a phone-width column inside a wide window.
             const containerWidth = this.container?.clientWidth || window.innerWidth;
             const isTablet = containerWidth >= 500;
             item.style.padding = isTablet ? "12px 16px" : "10px 14px";

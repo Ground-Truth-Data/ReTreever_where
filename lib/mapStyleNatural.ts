@@ -1,24 +1,11 @@
-/**
- * Natural Dark style — runtime overrides on top of Mapbox dark-v11.
- *
- * Turns the grey "Death Star" globe into a natural-looking Earth:
- *   - Dark ocean blue water, visible waterways
- *   - Muted green land with landcover variation
- *   - Faint contour lines + hillshade for terrain texture
- *   - Lazy satellite imagery at site zoom (≥14, loaded on idle)
- *   - No labels, roads, POIs, buildings, transit, or admin borders
- *
- * Performance: all changes are vector/paint-property at globe zoom.
- * The only raster sources (DEM hillshade, satellite) are gated behind
- * minzoom thresholds, so they never fetch tiles at globe scale.
- */
+// Natural Dark: runtime overrides on Mapbox dark-v11. Raster sources (DEM,
+// satellite) are gated behind minzoom so they never fetch at globe scale.
 import type * as mapboxgl from "mapbox-gl";
 
-// ── Palette ────────────────────────────────────────────────────────────
 const P = {
-    land: "#2f5a32", // muted forest green — lighter so gold pins pop
-    ocean: "#0d2038", // deep navy
-    waterway: "rgba(13, 40, 80, 0.7)", // lighter blue for rivers
+    land: "#2f5a32", // lighter so gold pins pop
+    ocean: "#0d2038",
+    waterway: "rgba(13, 40, 80, 0.7)",
     lc: {
         wood: "rgba(22, 62, 28, 0.55)",
         grass: "rgba(32, 54, 22, 0.45)",
@@ -33,13 +20,10 @@ const P = {
     },
 } as const;
 
-// Satellite fades in at site zoom — only loaded on idle.
-// Wide fade range (10→15) so the crossfade is gradual, not abrupt.
 const SAT_MIN_ZOOM = 10;
 const SAT_FULL_ZOOM = 15;
 const SAT_OPACITY = 0.85;
 
-// Fog preset tuned to complement the natural palette
 export const NATURAL_FOG: mapboxgl.FogSpecification = {
     color: "rgba(12, 30, 22, 0.28)",
     "high-color": "rgba(8, 20, 55, 0.22)",
@@ -48,7 +32,6 @@ export const NATURAL_FOG: mapboxgl.FogSpecification = {
     "star-intensity": 0.5,
 };
 
-// ── Layer hide rules ───────────────────────────────────────────────────
 const HIDE_PREFIXES = [
     "road",
     "bridge",
@@ -64,7 +47,7 @@ const HIDE_PREFIXES = [
     "waterway-label",
     "water-point",
     "water-line",
-    "admin", // hide borders entirely — replaced by contours + waterways
+    "admin",
 ];
 
 function shouldHide(id: string, type: string): boolean {
@@ -72,16 +55,8 @@ function shouldHide(id: string, type: string): boolean {
     return HIDE_PREFIXES.some((p) => id.startsWith(p));
 }
 
-// ── Safe setters ───────────────────────────────────────────────────────
-/**
- * ASK FIRST, don't catch. A try/catch around setPaintProperty looks like it
- * silences a missing layer, but it does NOT: Mapbox `console.error`s the
- * "layer 'x' does not exist" trace BEFORE it throws, so the catch swallows
- * the exception and the console still fills with red. `getLayer` is the same
- * lookup without the noise — an absent layer is a normal outcome here,
- * because these overrides run against whatever layer set the style shipped
- * with and Mapbox renames base layers between style versions.
- */
+// getLayer first, never try/catch: Mapbox console.errors a missing layer BEFORE
+// it throws, and base layers are renamed between style versions.
 function setPaint<K extends keyof mapboxgl.PaintSpecification>(
     map: mapboxgl.Map,
     id: string,
@@ -97,18 +72,11 @@ function hide(map: mapboxgl.Map, id: string): void {
     map.setLayoutProperty(id, "visibility", "none");
 }
 
-// ── Main entry point ───────────────────────────────────────────────────
 export function applyNaturalOverrides(map: mapboxgl.Map): void {
     const layers = map.getStyle()?.layers;
     if (!layers) return;
 
-    // 1. Recolor base surfaces
-    // DISCOVER the background layer, don't name it. Every other rule here
-    // finds its layers by scanning `layers`; this one alone hardcoded the id
-    // "background", which dark-v11 does not use — so the land colour silently
-    // never applied and the only sign was a red console trace. Matching on
-    // `type === "background"` is the style spec's own guarantee: there is at
-    // most one, whatever it happens to be called.
+    // By type, not id: dark-v11 does not call its background layer "background".
     for (const l of layers) {
         if (l.type === "background") {
             setPaint(map, l.id, "background-color", P.land);
@@ -120,7 +88,6 @@ export function applyNaturalOverrides(map: mapboxgl.Map): void {
         }
     }
 
-    // 2. Show waterways as lighter blue geographic detail
     for (const l of layers) {
         if (/^waterway/.test(l.id) && l.type === "line") {
             setPaint(map, l.id, "line-color", P.waterway);
@@ -128,27 +95,23 @@ export function applyNaturalOverrides(map: mapboxgl.Map): void {
         }
     }
 
-    // 3. Hide clutter (roads, labels, POIs, transit, buildings, borders)
     for (const l of layers) {
         if (shouldHide(l.id, l.type)) hide(map, l.id);
     }
 
-    // 4. Tint existing landuse layers (parks, etc.)
     for (const l of layers) {
         if (/^landuse/.test(l.id) && l.type === "fill") {
             setPaint(map, l.id, "fill-color", "rgba(26, 48, 24, 0.25)");
         }
     }
 
-    // 5. Landcover fills — lightweight vector, added immediately
     addLandcover(map);
 
-    // 6. Heavy layers lazy-loaded on idle — no raster work during gestures
-    setupLazyTerrain(map); // hillshade + contours at zoom ≥ 9
-    setupLazySatellite(map); // satellite imagery at zoom ≥ 12
+    // Raster layers load on idle so no raster work happens during gestures.
+    setupLazyTerrain(map);
+    setupLazySatellite(map);
 }
 
-// ── Landcover (vector, very lightweight) ───────────────────────────────
 function addLandcover(map: mapboxgl.Map): void {
     const src = "natural-terrain";
     if (!map.getSource(src)) {
@@ -175,9 +138,6 @@ function addLandcover(map: mapboxgl.Map): void {
     }
 }
 
-// ── Lazy terrain (hillshade + contours) ─────────────────────────────────
-// DEM source + layers only added on first idle at zoom ≥ 9. Before that,
-// the map is pure vector — zero raster tile processing during gestures.
 const TERRAIN_MIN_ZOOM = 9;
 
 function setupLazyTerrain(map: mapboxgl.Map): void {
@@ -190,7 +150,6 @@ function setupLazyTerrain(map: mapboxgl.Map): void {
         added = true;
         map.off("idle", onIdle);
 
-        // Hillshade — DEM raster source, only fetched now
         if (!map.getSource("natural-dem")) {
             map.addSource("natural-dem", {
                 type: "raster-dem",
@@ -198,8 +157,7 @@ function setupLazyTerrain(map: mapboxgl.Map): void {
                 tileSize: 256,
             });
         }
-        // Explicitly disable 3D terrain to prevent elevation-based camera
-        // recursion (Maximum call stack size exceeded). Hillshade still works.
+        // 3D terrain recurses the globe camera and blows the stack; hillshade still works.
         map.setTerrain(null);
         if (!map.getLayer("natural-hillshade")) {
             map.addLayer({
@@ -216,7 +174,6 @@ function setupLazyTerrain(map: mapboxgl.Map): void {
             });
         }
 
-        // Contour lines — uses the terrain vector source (already added by landcover)
         if (!map.getLayer("natural-contours")) {
             map.addLayer({
                 id: "natural-contours",
@@ -246,11 +203,7 @@ function setupLazyTerrain(map: mapboxgl.Map): void {
     map.on("idle", onIdle);
 }
 
-// ── Lazy satellite at site zoom ────────────────────────────────────────
-// Source + layer added on the FIRST idle at zoom ≥ SAT_MIN_ZOOM.
-// After that, the layer persists — Mapbox handles the zoom-based opacity
-// fade and minzoom cutoff smoothly via GPU interpolation. No hide/show
-// toggling on gestures (that causes flashing).
+// The layer persists once added; hide/show toggling on gestures flashes.
 function setupLazySatellite(map: mapboxgl.Map): void {
     let added = false;
 
@@ -270,7 +223,6 @@ function setupLazySatellite(map: mapboxgl.Map): void {
         }
 
         if (!map.getLayer("natural-sat")) {
-            // Insert below data layers but above landcover/hillshade.
             const dataLayer = map
                 .getStyle()
                 ?.layers?.find(
@@ -296,8 +248,6 @@ function setupLazySatellite(map: mapboxgl.Map): void {
                             SAT_FULL_ZOOM,
                             SAT_OPACITY,
                         ],
-                        // Each tile crossfades in over 500ms instead of
-                        // popping — smooths out the "layer peel" effect.
                         "raster-fade-duration": 500,
                     },
                 },

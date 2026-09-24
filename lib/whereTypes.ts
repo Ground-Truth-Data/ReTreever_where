@@ -1,4 +1,4 @@
-/** A spot the visitor starred; coords captured at favourite time so the map can fly back without refetching centroids. */
+/** Coords captured at favourite time so the map can fly back without refetching centroids. */
 export type FavouriteLocation = {
 	landKey: string;
 	landName: string;
@@ -6,7 +6,7 @@ export type FavouriteLocation = {
 	lat: number;
 };
 
-/** Where the marker box can send you; the host fills these in — a child running on rapper has nowhere to go, so every entry is optional. */
+/** The host fills these in; a standalone child has nowhere to go. */
 export type WhereRoutes = {
 	what?: string;
 	whatProject?: (key: string) => string;

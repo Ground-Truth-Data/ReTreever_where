@@ -1,6 +1,3 @@
-// Imported, not a "/mobileAssets/..." path handed to the browser: the bundler
-// resolves it at build time so the marker travels with this child instead of
-// depending on whichever server answered.
 import defaultMarkerUrl from "./assets/mobileAssets/map-marker-osem-people.svg";
 import type { MapOptions } from "./mapTypes";
 
@@ -19,9 +16,7 @@ export const MAP_CONFIG = {
         maxZoom: 14,
         radius: 45,
         clickZoom: 14,
-        // Graduated circle stops: [point_count, radius_px, color]
-        // Transparent fill — only the white stroke ring shows. The gold glow
-        // underneath shines through the empty center.
+        // Transparent fill: the gold glow shines through the white ring.
         circleStops: [
             { count: 1, radius: 8, color: "rgba(255, 255, 255, 0)" },
             { count: 10, radius: 14, color: "rgba(255, 255, 255, 0)" },
@@ -32,16 +27,11 @@ export const MAP_CONFIG = {
             color: "rgba(255, 255, 255, 0.95)",
             width: 1.5,
         },
-        // Soft oversized underlay that gives the "gold cloud" glow feel.
-        // radiusScale = 2.2× core, blur = 0.55 means the inner half of the
-        // glow stays bright (filling up to the white ring) and the outer half
-        // fades out past the ring for the cloud effect.
         glow: {
             color: "rgba(255, 200, 0, 0.45)",
             radiusScale: 1.25,
             blur: 0.35,
         },
-        // Heatmap color ramp keyed by heatmap-density (0..1) — gold ramp
         heatmap: {
             minZoom: 0,
             maxZoom: 7,
@@ -58,17 +48,15 @@ export const MAP_CONFIG = {
         width: markerSize,
         height: markerSize,
         alt: "map Pin",
-        iconPixelSize: 56, // rasterized size for symbol layer icon
-        iconSize: 1.1, // base symbol-layer scale (multiplied per zoom in layer)
+        iconPixelSize: 56,
+        iconSize: 1.1,
     },
     globe: {
         rotationSpeed: 1.5,
         maxSpinZoom: 4,
         duration: 1000,
     },
-    // Elastic zoom: user can pinch past soft.min / soft.max by `overshoot`
-    // zoom levels, then the map eases back to the soft limit on release.
-    // See mapDocs.md — gesture feedback over hard limits.
+    // Elastic zoom: pinch `overshoot` past the soft limits, then ease back.
     zoom: {
         softMin: 0.5,
         softMax: 20,
@@ -77,11 +65,6 @@ export const MAP_CONFIG = {
     },
 } as const;
 
-/**
- * Option presets. These were a second file (`mapConfig.ts`) whose name differed
- * from this one only by case — one filename to macOS, two to git and the
- * bundler. Merged 14 Sep 2026.
- */
 export const defaultOptions = {
     compact: false,
     showNavigation: false,

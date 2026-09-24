@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const CHILD = fileURLToPath(new URL("..", import.meta.url));
 const EXT = new Set([".svelte", ".ts", ".js", ".css", ".json"]);
 
-// Tests are exempt by SHAPE (*.test.*), not by an explicit list — they never cross the build boundary a parent bundles.
+// Tests are exempt: they never cross the build boundary a parent bundles.
 const isTest = (name: string) => /\.test\.[^.]+$/.test(name);
 
 function sources(dir: string, out: string[] = []): string[] {
@@ -21,11 +21,11 @@ function sources(dir: string, out: string[] = []): string[] {
 	return out;
 }
 
-// A parent named as a PLACE: a path segment, an import, or a URL host — anchored on separators so it won't fire on this child's own folder name or on comment prose.
-// Symbol.for(...) registry keys are brand strings, not locations, and are exempt by shape — a guard that cries wolf gets deleted.
+// A parent named as a PLACE (path segment, import, URL host), anchored on separators so prose doesn't fire.
+// Symbol.for(...) keys are brand strings, not locations.
 const BRAND_STRING = /Symbol\.for\(/;
 
-// ⚠️ Match both mid-path (`../ReTreever/…`) and terminal occurrences (`href="{GH}/rapper"`, a bare URL, `<span>retreever</span>`) — a trailing-delimiter-only regex missed every terminal case and let real offenders through.
+// Must match both mid-path (`../ReTreever/…`) and terminal (`href="{GH}/rapper"`) occurrences.
 const PARENT_AS_LOCATION =
 	/(?:\.\.?\/|["'`({]\/?|\}\/|https?:\/\/[^"'`\s]*)(?:ReTreever|rapper|vercel)(?:[/.]|["'`)\s<]|$)/gi;
 
@@ -35,15 +35,13 @@ describe("the child names no parent", () => {
 
 		for (const file of sources(CHILD)) {
 			const text = readFileSync(file, "utf8");
-			// Checked over two joined lines so a wrapped Symbol.for(...) is still recognised as a brand string.
+			// Two joined lines so a wrapped Symbol.for(...) is still recognised.
 			const lines = text.split("\n");
-			// Block comments span lines, so comment-detection tracks state across lines rather than per-line (startsWith('*') alone misses plainly-indented continuation lines).
 			let inBlockComment = false;
 			for (const [i, line] of lines.entries()) {
 				const stmt = `${lines[i - 1] ?? ""}\n${line}`;
 				const t = line.trim();
 				const wasInComment = inBlockComment;
-				// Opens/closes counted per line so a one-line /* */ isn't treated as opening a block, and a closing line is still skipped up to the close.
 				const opens = (line.match(/\/\*/g) ?? []).length;
 				const closes = (line.match(/\*\//g) ?? []).length;
 				if (opens > closes) inBlockComment = true;
@@ -78,7 +76,6 @@ describe("the child names no parent", () => {
 		const ok = 'import x from "$parent/siblings/getCache_OnlineMap/lib/foo";';
 		expect([...ok.matchAll(PARENT_AS_LOCATION)].length).toBe(0);
 
-		// Both shapes (mid-path and terminal) are asserted by name — losing either re-opens the hole the regex used to miss.
 		const bad = [
 			'import x from "../ReTreever/src/lib/foo";', // mid-path
 			'href="{GH}/rapper"', // terminal, in a string

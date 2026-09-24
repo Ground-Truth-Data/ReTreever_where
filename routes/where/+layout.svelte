@@ -16,9 +16,7 @@ type HostProps = {
 	ensureMapboxGuards?: () => Promise<void>;
 };
 
-// A LAYOUT, not a page: /where, /where/orgs and /where/projects are three
-// routes under it, each an empty +page.svelte. The map is built once here and
-// a view toggle only changes `view` — a page would remount the globe.
+// A layout, not a page: a view toggle would otherwise remount the globe.
 let {
 	hostProps,
 	children,
@@ -26,7 +24,7 @@ let {
 
 let view = $derived(($page.params.view as WhereView | undefined) ?? null);
 
-// Session-only, in memory — a child owns no storage; inventing a localStorage key here would put a child's data in whichever product happened to mount it.
+// In memory only: a child owns no storage.
 let favourites = $state<FavouriteLocation[]>([]);
 
 function toggleFavourite(loc: FavouriteLocation) {

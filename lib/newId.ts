@@ -1,8 +1,8 @@
-// UUIDv4 built on crypto.getRandomValues — crypto.randomUUID is undefined in insecure contexts (Capacitor live-reload on a LAN IP), and WKWebView on iOS 26 rejects a polyfill assignment to the readonly Crypto interface, so getRandomValues is used directly instead.
+// getRandomValues, not randomUUID: the latter is undefined in insecure contexts (live-reload on a LAN IP), and WKWebView rejects a polyfill on the readonly Crypto.
 
 const HEX = "0123456789abcdef";
 
-/** Random v4 UUID. Safe in every runtime rapper ships into. */
+/** Random v4 UUID. */
 export function newId(): string {
 	const b = new Uint8Array(16);
 	crypto.getRandomValues(b);

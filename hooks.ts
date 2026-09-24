@@ -1,6 +1,5 @@
 import type { Reroute } from "@sveltejs/kit";
 
-// Universal hook — reached only when a parent points kit.files.hooks.universal here; a standalone child never runs it.
 // ⚠️ Keep DEFAULT in step with this child's defaultPath in the registry — nav and the printed url read that record.
 const SERVED = ["/where/orgs", "/where/projects"];
 const DEFAULT = "/where";
