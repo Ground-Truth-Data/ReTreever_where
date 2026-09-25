@@ -1,7 +1,4 @@
-// Area-name label placement, pure (no DOM, no Mapbox). Labels are a budget
-// placed by priority; losers collapse to a dot; zoom sets the budget. Decisions
-// are sticky: pass `previous` and an incumbent sorts first and tolerates
-// HYSTERESIS_PX2 of overlap, or borderline pairs chatter every camera frame.
+// Sticky priority layout: pass `previous` or borderline labels chatter every frame.
 
 // Keep in sync with the .area-chip CSS in areaLabels.ts (font-size, max-width, padding).
 const HANDLE_PX = 12;
@@ -17,7 +14,6 @@ export type PrioMode = "both" | "big" | "recent";
 export interface LabelArea {
 	id: string;
 	fullName: string;
-	/** Short handle. Falls back to deriveHandle(fullName) when empty. */
 	displayName?: string;
 	hectares: number;
 	/** Pass 0 for all when unknown; the score then orders purely by size. */
@@ -36,16 +32,13 @@ export interface LayoutOpts {
 	prioMode?: PrioMode;
 	selectedId?: string | null;
 	collapseLosersToDot?: boolean;
-	/** Area centroid → screen px. */
 	project: (area: LabelArea) => { x: number; y: number };
-	/** Text width in px with the label font set at `px`. */
 	measureText: (text: string, px: number) => number;
 	/** Last pass's decision per id; omit on a cold pass. */
 	previous?: ReadonlyMap<string, LabelDecision["kind"]>;
 }
 
 const FILLER = /^(blk|block|mini|pile|restor|restoration)$/i;
-/** A short handle suggestion from a long free-text name. */
 export function deriveHandle(fullName: string): string {
 	// An auto-generated name is "<date><kind>_<user>": the kind word sits after the date.
 	const s = String(fullName)
@@ -91,7 +84,6 @@ export function collidesWithPlaced(
 
 export interface LayoutResult {
 	decisions: LabelDecision[];
-	/** Every reserved footprint, for follow-on tiers. */
 	placed: PlacedBox[];
 }
 
@@ -116,8 +108,7 @@ export function layoutLabels(
 		maxVisited: Math.max(...areas.map((a) => a.visitedDaysAgo)),
 	};
 
-	// Selected, then incumbents, then score: re-ordering every frame would hand
-	// the space to a different winner even with the deadband.
+	// Selected, then incumbents, then score, or the deadband can't hold a winner.
 	const order = [...areas].sort((a, b) => {
 		if (a.id === selectedId) return -1;
 		if (b.id === selectedId) return 1;

@@ -28,19 +28,11 @@ const DRAW_SOURCE_IDS = [
 ] as const;
 const COMPLETED_SOURCE_ID = "completed-features";
 
-// Below this, clustered centroid pins carry the names; above it areaLabels puts
-// labels on the shapes. Every cluster split relocates the pin to the new mean and
-// reads as flight, so hand off before the splits get big.
+// A cluster split re-averages the pin and reads as flight; hand off before splits get big.
 export const BOUNDARY_PIN_MAXZOOM = 12;
-// Higher than the cluster handoff: a lone block's egg has no members to
-// re-average, so it sits on the shape until the shape is readable.
 export const SHAPE_DRAW_MINZOOM = 14;
-// A polygon is a thin outline; a block carries a gold disc on every corner, and
-// that is what huddles. They share one source, so the split rides the filter.
 export const POLYGON_DRAW_MINZOOM = 10;
-// One clustered source per kind: supercluster groups by distance alone, so two
-// kinds in one source merge into one pin. ORDER IS PAINT ORDER — block last so
-// it wins the overlap.
+// ORDER IS PAINT ORDER — block last so it wins the overlap.
 export const CENTROID_KINDS = ["polygon", "block"] as const;
 export type CentroidKind = (typeof CENTROID_KINDS)[number];
 const centroidSourceId = (k: CentroidKind) => `completed-centroids-${k}`;
@@ -54,20 +46,18 @@ export const POLYGON_OUTLINE = "#d97c33";
 export const BLOCK_GOLD = "#ffd700";
 const TRACK_GOLD = BLOCK_GOLD;
 
-// A plain sequence, not smallest-unused-colour: that made every child overlapping only the parent identically red.
 export const POLYGON_COLOR_CYCLE: ReadonlyArray<{
 	fill: string;
 	stroke: string;
 }> = [
-	{ fill: POLYGON_FILL, stroke: POLYGON_OUTLINE }, // rust — the original
-	{ fill: "#cf4444", stroke: "#b82222" }, // red
-	{ fill: "#8fd48a", stroke: "#3a9e4e" }, // green
-	{ fill: "#7db4ec", stroke: "#2f7fd1" }, // blue
-	{ fill: "#9c92ea", stroke: "#5a4bc9" }, // indigo
-	{ fill: "#d386e8", stroke: "#a33bc9" }, // violet
+	{ fill: POLYGON_FILL, stroke: POLYGON_OUTLINE },
+	{ fill: "#cf4444", stroke: "#b82222" },
+	{ fill: "#8fd48a", stroke: "#3a9e4e" },
+	{ fill: "#7db4ec", stroke: "#2f7fd1" },
+	{ fill: "#9c92ea", stroke: "#5a4bc9" },
+	{ fill: "#d386e8", stroke: "#a33bc9" },
 ];
 
-// The host stamps the block name onto the feature as `blockNumber`; only an area can be a block.
 export function isBlockFeature(feat: Feature): boolean {
 	const gt = feat.geometry?.type;
 	if (gt !== "Polygon" && gt !== "MultiPolygon") return false;
@@ -77,7 +67,6 @@ export function isBlockFeature(feat: Feature): boolean {
 
 const IS_BLOCK: ExpressionSpecification = ["==", ["get", "_isBlock"], true];
 
-// A block's nodes are part of its identity, so they show with nothing selected.
 const IS_BLOCK_VERTEX: ExpressionSpecification = [
 	"==",
 	["get", "_parentIsBlock"],
@@ -90,9 +79,8 @@ const IS_BLOCK_OR_ITS_VERTEX: ExpressionSpecification = [
 	IS_BLOCK_VERTEX,
 ];
 
-// A PAINT expression, never a filter: zoom expressions in filters are only
-// evaluated at integer zooms (mapbox-gl-js#6236), so a filter gate goes stale
-// between them. `step` keeps the hard on/off.
+// A PAINT expression, never a filter: filter zoom expressions only evaluate
+// at integer zooms (mapbox-gl-js#6236) and go stale between them.
 const shapeOpacity = (
 	full: ExpressionSpecification | number,
 ): ExpressionSpecification =>
@@ -106,22 +94,17 @@ const shapeOpacity = (
 		full,
 	] as unknown as ExpressionSpecification;
 
-// A cluster point (point_count) or a lone leaf (_bbox).
 const HAS_CENTROID: ExpressionSpecification = [
 	"any",
 	["has", "point_count"],
 	["has", "_bbox"],
 ];
-// A lone block's egg captioned "1" says nothing.
 const IS_REAL_CLUSTER: ExpressionSpecification = [
 	">",
 	["coalesce", ["get", "point_count"], 0],
 	1,
 ];
 
-// Every stroke width, one place. They are a FAMILY — a block reads loudest by
-// ratio, so re-judge the rest when one changes. `casing` is the dark line under
-// `line`; keep it ~1.5px wider a side or it reads as a second outline.
 export const STROKE = {
 	block: { line: 5, casing: 9 },
 	polygon: { line: 1.5, casing: 3.5 },
@@ -131,7 +114,7 @@ export const STROKE = {
 	track: { line: 1.5, casing: 3, gap: 3, casingGap: 1.5 },
 } as const;
 
-// Radii. Blocks interpolate across zoom because their nodes are visible at rest at every scale.
+// Blocks interpolate across zoom because their nodes are visible at rest at every scale.
 export const NODE = {
 	block: {
 		disc: [
@@ -151,8 +134,7 @@ export const NODE = {
 	trackDot: 5.5,
 } as const;
 
-// `["zoom"]` is legal only as the outermost interpolate/step input, so a
-// per-vertex `case` goes inside each stop via `atStop`.
+// `["zoom"]` is legal only as the outermost interpolate/step input, so a per-vertex `case` goes inside each stop via `atStop`.
 function zoomRamp(
 	stops: ReadonlyArray<readonly [number, number]>,
 	atStop: (value: number) => ExpressionSpecification | number = (v) => v,
@@ -195,7 +177,6 @@ function polygonsShareArea(a: Feature<Polygon>, b: Feature<Polygon>): boolean {
 	}
 }
 
-// Colour-cycle entry per feature index (absent = default rust).
 export function assignOverlapColors(
 	features: Feature[],
 ): Map<number, { fill: string; stroke: string }> {
@@ -214,7 +195,6 @@ export function assignOverlapColors(
 		if (isBlockFeature(feat)) continue;
 		const poly = feat as Feature<Polygon>;
 		const bbox = outerRingBbox(poly.geometry);
-		// Earliest-drawn overlapping polygon decides the stack.
 		let root = -1;
 		for (let p = 0; p < placed.length; p++) {
 			const prev = placed[p];
@@ -238,7 +218,6 @@ export function assignOverlapColors(
 	return out;
 }
 
-// A slight wash: reads as an area, ground still visible.
 export const POLYGON_FILL_OPACITY_DEFAULT = 0.18;
 
 // Stacked fills compound, so stacked children paint thinner.
@@ -262,7 +241,6 @@ function polygonFillOpacityExpr(): ExpressionSpecification {
 	return ["min", 1, ["*", polygonFillFactor, POLYGON_FILL_OPACITY_EXPR]];
 }
 
-// Blanket fill-opacity factor, 0–2 with centre 1.
 export function applyPolygonFillOpacity(map: MapboxMap, factor: number): void {
 	polygonFillFactor = Math.max(0, Math.min(2, factor));
 	if (map.getLayer("completed-fill")) {
@@ -322,17 +300,14 @@ function teardownDrawLayers(map: MapboxMap): void {
 	}
 }
 
-// Idempotent — safe to call multiple times on the same map instance.
 export function setupDrawSourcesAndLayers(
 	map: MapboxMap,
 	accent: string,
 	/** `false` on a host that draws geometry elsewhere (mobile's SnakeRuler) — saves sources and GPU layers. */
 	withInProgress = true,
-	/** Runs after the layers exist. */
 	onPainted?: () => void,
 ): void {
-	// Keyed off completed-features, which every host creates. In dev, rebuild so
-	// a paint edit here shows on hot reload; in prod re-adding would throw.
+	// In dev, rebuild so a paint edit here shows on hot reload; in prod re-adding would throw.
 	if (map.getSource(COMPLETED_SOURCE_ID)) {
 		if (!import.meta.env?.DEV) return;
 		teardownDrawLayers(map);
@@ -472,7 +447,6 @@ export function setupDrawSourcesAndLayers(
 				STROKE.track.gap,
 				0,
 			],
-			// Just off solid: at block size a full-weight outline shouts.
 			"line-opacity": shapeOpacity(["case", IS_BLOCK, 0.78, 1]),
 		},
 	});
@@ -497,7 +471,6 @@ export function setupDrawSourcesAndLayers(
 		type: "circle",
 		source: COMPLETED_SOURCE_ID,
 		filter: VERTEX_HANDLES_HIDDEN,
-		// Track vertices carry no halo: breadcrumbs, not handles.
 		paint: {
 			"circle-radius": zoomRamp(NODE.block.disc, (blockR) => [
 				"case",
@@ -607,8 +580,7 @@ export function setupDrawSourcesAndLayers(
 				// A literal stack 404s on whichever map it wasn't written for.
 				"text-font": glyphStack(map),
 				"text-size": 13,
-				// Opposite shoulders, beside the pin never over the donut hole: a polygon
-				// is often drawn on a block, so both eggs land on the same spot.
+				// Beside the pin, never over the donut hole: a polygon is often drawn on a block.
 				"text-anchor": isBlock ? "left" : "right",
 				"text-offset": isBlock ? [0.5, -0.75] : [-0.5, -0.75],
 				"text-allow-overlap": true,
@@ -625,7 +597,6 @@ export function setupDrawSourcesAndLayers(
 	onPainted?.();
 }
 
-// idx = the feature's _idx; null hides every handle.
 export function setVertexHandlesForFeature(
 	map: MapboxMap,
 	idx: number | null,
@@ -673,7 +644,6 @@ function buildCentroidFC(
 		if (g?.type !== "Polygon" && g?.type !== "MultiPolygon") continue;
 		const bbox = geometryBbox(g);
 		if (!bbox) continue;
-		// The short handle, never the raw paragraph; unnamed polygons get a bare pin.
 		const fullName = String(feat.properties?.name ?? "").trim();
 		const rawHandle =
 			String(feat.properties?.displayName ?? "").trim() ||
@@ -710,7 +680,6 @@ export function setCentroidSources(
 		setSource(centroidSourceId(kind), fcs[kind]);
 }
 
-// GL serializes non-scalar properties, so _bbox comes back JSON-stringified.
 function parseBbox(raw: unknown): RingBbox | null {
 	let arr: unknown = raw;
 	if (typeof raw === "string") {
@@ -739,7 +708,6 @@ export function boundaryPinAt(
 
 const boundaryPinWired = new WeakSet<MapboxMap>();
 
-// Once per map instance; isNavigationAllowed lets a draw tool veto so a vertex tap never flies the camera.
 export function wireBoundaryPinNavigation(
 	map: MapboxMap,
 	isNavigationAllowed: () => boolean = () => true,
@@ -838,7 +806,6 @@ export function buildProvisionalPolygonFC(
 	return { type: "FeatureCollection", features };
 }
 
-// Pins are DOM markers, not a symbol layer, so Points are excluded.
 export function buildCompletedFC(features: Feature[]): FeatureCollection {
 	const out: Feature[] = [];
 	// Stamped onto FC copies, never stored features, so colour re-derives on every rebuild.
@@ -866,7 +833,6 @@ export function buildCompletedFC(features: Feature[]): FeatureCollection {
 
 		if (feat.geometry?.type === "Polygon") {
 			const ring = (feat.geometry as Polygon).coordinates[0];
-			// Skip the closing duplicate vertex.
 			const last = ring.length - 1;
 			const closes =
 				ring.length > 1 &&
@@ -922,7 +888,6 @@ export interface PixelBbox {
 	maxY: number;
 }
 
-// Returns null if coords is empty.
 export function projectLnglatBbox(
 	map: MapboxMap,
 	coords: ReadonlyArray<Lnglat | number[]>,
@@ -994,7 +959,6 @@ export function clearInProgressSources(map: MapboxMap): void {
 	}
 }
 
-// name stays empty: the host supplies the default name.
 export function finalizeFeature(
 	intent: Exclude<DrawIntent, null>,
 	vertices: Lnglat[],
