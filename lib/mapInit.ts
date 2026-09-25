@@ -130,7 +130,7 @@ export function initializeMap(
 
     const userInteractingRef = { current: false };
 
-    // The transform must be born finite: mapbox's mousemove handler throws on a NaN camera.
+    // Born finite: mapbox's mousemove handler throws on a NaN camera.
     const safeCenter: [number, number] = isCoord(opts.initialCenter)
         ? ([opts.initialCenter[0], opts.initialCenter[1]] as [number, number])
         : ([
@@ -158,7 +158,7 @@ export function initializeMap(
             ? { transformRequest: opts.transformRequest }
             : {}),
         hash: false,
-        // Credit controls can't be moved after construction; re-added by hand below.
+        // Can't be moved after construction; re-added by hand below.
         ...(opts.creditsSplit
             ? {
                   logoPosition: "bottom-right" as const,
@@ -185,7 +185,7 @@ export function initializeMap(
     map.dragRotate.disable();
     map.touchZoomRotate.disableRotation();
 
-    // iOS WebKit reclaims the GL context under memory pressure; `webglcontextrestored` needs preventDefault() on loss.
+    // iOS reclaims the GL context under memory pressure; restore needs preventDefault() on loss.
     const glCanvas = map.getCanvas();
     const onContextLost = (e: Event) => {
         e.preventDefault();
@@ -199,7 +199,7 @@ export function initializeMap(
     glCanvas.addEventListener("webglcontextlost", onContextLost, false);
     glCanvas.addEventListener("webglcontextrestored", onContextRestored, false);
 
-    // A resize while the container is momentarily 0×0 (popover, iOS keyboard) leaves a NaN camera that never self-repairs.
+    // A resize while the container is momentarily 0×0 leaves a NaN camera that never self-repairs.
     let lastGoodCenter: [number, number] = safeCenter;
     let lastGoodZoom = safeZoom;
     let unhealthySince: number | null = null;
@@ -249,7 +249,7 @@ export function initializeMap(
         }
     }, 400);
 
-    // On globe projection any DEM source makes animated easeTo recurse and blow the stack.
+    // Any DEM source on globe projection makes animated easeTo recurse and blow the stack.
     map.on("style.load", () => {
         map.setTerrain(null);
     });
@@ -269,7 +269,7 @@ export function initializeMap(
     }
 
     if (opts.autoRotate) {
-        // map.stop() freezes the globe synchronously — the rAF step alone would slide one more frame and miss the click.
+        // map.stop() freezes the globe synchronously; the rAF step alone would miss the click.
         map.on("mousedown", () => {
             userInteractingRef.current = true;
             map.stop();
@@ -280,7 +280,6 @@ export function initializeMap(
             opts.onUserInteractionEnd?.();
         });
 
-        // The first touchend arrives while the second finger is still pinching.
         map.on("touchstart", () => {
             userInteractingRef.current = true;
             map.stop();
@@ -291,7 +290,7 @@ export function initializeMap(
             userInteractingRef.current = false;
             opts.onUserInteractionEnd?.();
         });
-        // A cancelled touch fires no touchend; without this the globe never spins again.
+        // Fires no touchend; without this the globe never spins again.
         map.on("touchcancel", () => {
             userInteractingRef.current = false;
             opts.onUserInteractionEnd?.();
@@ -359,14 +358,14 @@ export function initializeMap(
                                 "none",
                             );
                     } catch {
-                        // codestyle-allow-swallow: hiding a label layer is cosmetic; a style not yet loaded / missing layer id just leaves it visible
+                        // codestyle-allow-swallow: cosmetic; unloaded/missing layer just stays visible
                     }
                 }
             }
         });
     }
 
-    // Mapbox's terms require the attribution visible; `compact: false` keeps it a line, not an (i) button.
+    // `compact: false` keeps attribution a line, not an (i) button (Mapbox requires it visible).
     if (opts.creditsSplit) {
         map.addControl(
             new mapboxgl.AttributionControl({ compact: false }),
@@ -427,7 +426,7 @@ export function initializeMap(
         );
     }
 
-    // Elastic zoom: hard limits sit `overshoot` past the soft ones and zoomend eases back.
+    // Hard limits sit `overshoot` past the soft ones; zoomend eases back.
     const { softMin, softMax, overshoot, easeMs } = MAP_CONFIG.zoom;
     map.setMinZoom(softMin - overshoot);
     map.setMaxZoom(softMax + overshoot);

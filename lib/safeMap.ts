@@ -35,7 +35,6 @@ function isFiniteNumber(n: unknown): n is number {
     return typeof n === "number" && Number.isFinite(n);
 }
 
-// Not isCoord: its geographic range check rejects valid pixel offsets like [0, -160].
 function isFinitePixelPair(p: unknown): p is [number, number] {
     return (
         Array.isArray(p) &&
@@ -45,7 +44,6 @@ function isFinitePixelPair(p: unknown): p is [number, number] {
     );
 }
 
-// No animated transition can succeed from a NaN camera; jumpTo somewhere finite first.
 function ensureCleanCamera(
     map: CameraMap,
     fallbackCenter?: CoordInput,
@@ -154,7 +152,6 @@ export function safeFitBounds(
         reportRejection("fitBounds", "duration is not finite");
         return;
     }
-    // Padding that exceeds the viewport makes the derived zoom NaN, which survives Mapbox's clamp.
     if (map.cameraForBounds) {
         const cam = map.cameraForBounds(
             [
@@ -231,7 +228,7 @@ export function safeEaseTo(map: CameraMap, opts: SafeEaseToOptions): void {
     map.easeTo(opts);
 }
 
-// getBounds() throws on a momentarily degenerate transform; null means skip this frame.
+// Throws on a momentarily degenerate transform; null means skip this frame.
 export function safeGetBounds<T>(map: {
     getZoom(): number;
     getBounds(): T;

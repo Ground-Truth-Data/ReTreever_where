@@ -32,7 +32,7 @@ const COMPLETED_SOURCE_ID = "completed-features";
 export const BOUNDARY_PIN_MAXZOOM = 12;
 export const SHAPE_DRAW_MINZOOM = 14;
 export const POLYGON_DRAW_MINZOOM = 10;
-// ORDER IS PAINT ORDER — block last so it wins the overlap.
+// PAINT ORDER: block last so it wins the overlap.
 export const CENTROID_KINDS = ["polygon", "block"] as const;
 export type CentroidKind = (typeof CENTROID_KINDS)[number];
 const centroidSourceId = (k: CentroidKind) => `completed-centroids-${k}`;
@@ -42,7 +42,7 @@ const CENTROID_PIN_LAYERS = CENTROID_KINDS.map(
 
 const POLYGON_FILL = "#e8a06a";
 export const POLYGON_OUTLINE = "#d97c33";
-// The block signature; POLYGON_COLOR_CYCLE omits it so no ordinary polygon wears it.
+// POLYGON_COLOR_CYCLE omits gold so no ordinary polygon wears the block's signature.
 export const BLOCK_GOLD = "#ffd700";
 const TRACK_GOLD = BLOCK_GOLD;
 
@@ -108,9 +108,7 @@ const IS_REAL_CLUSTER: ExpressionSpecification = [
 export const STROKE = {
 	block: { line: 5, casing: 9 },
 	polygon: { line: 1.5, casing: 3.5 },
-	/** Drawn lines (NOT tracks). */
 	line: { line: 2, casing: 4 },
-	/** Recorded GPS breadcrumbs — dashed, with its own gap geometry. */
 	track: { line: 1.5, casing: 3, gap: 3, casingGap: 1.5 },
 } as const;
 
@@ -130,7 +128,7 @@ export const NODE = {
 		ring: 1.5,
 	},
 	handle: { disc: 5.5, pupil: 3 },
-	/** Track breadcrumbs carry no disc — a white ring on every GPS fix is clutter. */
+	// No disc: a white ring on every GPS fix is clutter.
 	trackDot: 5.5,
 } as const;
 
@@ -173,7 +171,7 @@ function polygonsShareArea(a: Feature<Polygon>, b: Feature<Polygon>): boolean {
 		const clip = intersect(featureCollection<Polygon>([a, b]));
 		return clip !== null && area(clip) > 1;
 	} catch {
-		return false; // degenerate ring — treat as no overlap
+		return false;
 	}
 }
 
@@ -184,7 +182,7 @@ export function assignOverlapColors(
 	const placed: {
 		feat: Feature<Polygon>;
 		bbox: RingBbox;
-		/** placed-index of this polygon's stack anchor (a root points at itself). */
+		// placed-index of this polygon's stack anchor (a root points at itself).
 		root: number;
 	}[] = [];
 	const stackSize = new Map<number, number>();
@@ -210,7 +208,7 @@ export function assignOverlapColors(
 		}
 		const n = stackSize.get(root) ?? 0;
 		stackSize.set(root, n + 1);
-		// Slot 0 is rust (the parent's); children walk slots 1..6.
+		// Slot 0 is the parent's; children walk slots 1..6.
 		const color = 1 + (n % (POLYGON_COLOR_CYCLE.length - 1));
 		placed.push({ feat: poly, bbox, root });
 		out.set(i, POLYGON_COLOR_CYCLE[color]);
@@ -220,7 +218,6 @@ export function assignOverlapColors(
 
 export const POLYGON_FILL_OPACITY_DEFAULT = 0.18;
 
-// Stacked fills compound, so stacked children paint thinner.
 const STACKED_FILL_OPACITY = 0.1;
 
 // to-number guards string values surviving a KML round-trip.
@@ -233,7 +230,7 @@ const POLYGON_FILL_OPACITY_EXPR: ExpressionSpecification = [
 	POLYGON_FILL_OPACITY_DEFAULT,
 ];
 
-// Module-level so a post-setStyle layer rebuild reapplies the current slider value.
+// Module-level: a post-setStyle layer rebuild must reapply the current slider value.
 let polygonFillFactor = 1;
 
 function polygonFillOpacityExpr(): ExpressionSpecification {
@@ -270,7 +267,6 @@ const VERTEX_HANDLE_LAYERS = [
 	"completed-vertices-dot",
 ] as const;
 
-// -1 matches no handle; block vertices bypass it entirely.
 const VERTEX_HANDLES_HIDDEN: FilterSpecification = [
 	"all",
 	["==", ["geometry-type"], "Point"],
@@ -303,7 +299,7 @@ function teardownDrawLayers(map: MapboxMap): void {
 export function setupDrawSourcesAndLayers(
 	map: MapboxMap,
 	accent: string,
-	/** `false` on a host that draws geometry elsewhere (mobile's SnakeRuler) — saves sources and GPU layers. */
+	// `false` on a host that draws geometry elsewhere (mobile's SnakeRuler).
 	withInProgress = true,
 	onPainted?: () => void,
 ): void {
@@ -388,7 +384,7 @@ export function setupDrawSourcesAndLayers(
 			"fill-opacity": shapeOpacity(["case", IS_BLOCK, 0, polygonFillOpacityExpr()]),
 		},
 	});
-	// Area-name labels are DOM markers (areaLabels.ts): GL text can't do the font/halo/wrap.
+	// Area-name labels are DOM markers: GL text can't do the font/halo/wrap.
 	map.addLayer({
 		id: "completed-stroke-halo",
 		type: "line",
@@ -532,9 +528,9 @@ export function setupDrawSourcesAndLayers(
 			data: empty,
 			cluster: true,
 			clusterMaxZoom: BOUNDARY_PIN_MAXZOOM,
-			// The pin's jump on a split scales with this; widen only with a split transition.
+			// Widen only with a split transition: the pin's jump on a split scales with this.
 			clusterRadius: 45,
-			// The default 2 emits a bare leaf for a solitary shape — a second feature shape to draw.
+			// The default 2 emits a bare leaf for a solitary shape — a second shape to draw.
 			clusterMinPoints: 1,
 		});
 		map.addLayer({
@@ -577,7 +573,6 @@ export function setupDrawSourcesAndLayers(
 			maxzoom: isBlock ? SHAPE_DRAW_MINZOOM : POLYGON_DRAW_MINZOOM,
 			layout: {
 				"text-field": ["get", "point_count_abbreviated"],
-				// A literal stack 404s on whichever map it wasn't written for.
 				"text-font": glyphStack(map),
 				"text-size": 13,
 				// Beside the pin, never over the donut hole: a polygon is often drawn on a block.
@@ -615,7 +610,6 @@ export function setVertexHandlesForFeature(
 	}
 }
 
-// Exported so areaLabels anchors labels at the same centre boundary pins use.
 export function geometryBbox(g: Polygon | MultiPolygon): RingBbox | null {
 	let minX = Infinity;
 	let minY = Infinity;
@@ -634,7 +628,7 @@ export function geometryBbox(g: Polygon | MultiPolygon): RingBbox | null {
 	return [minX, minY, maxX, maxY];
 }
 
-// Built from the same feature array as buildCompletedFC; _bbox lets a pin tap frame its polygon.
+// _bbox lets a pin tap frame its polygon.
 function buildCentroidFC(
 	features: Feature[],
 ): Record<CentroidKind, FeatureCollection> {
@@ -670,7 +664,6 @@ function buildCentroidFC(
 	};
 }
 
-// Every kind in one call: pushing one kind leaves the other stale on screen.
 export function setCentroidSources(
 	setSource: (id: string, data: FeatureCollection) => void,
 	features: Feature[],
@@ -696,7 +689,6 @@ function parseBbox(raw: unknown): RingBbox | null {
 		: null;
 }
 
-// Exclusive tap target: a hit here must not also select the polygon underneath.
 export function boundaryPinAt(
 	map: MapboxMap,
 	point: { x: number; y: number },
@@ -808,7 +800,7 @@ export function buildProvisionalPolygonFC(
 
 export function buildCompletedFC(features: Feature[]): FeatureCollection {
 	const out: Feature[] = [];
-	// Stamped onto FC copies, never stored features, so colour re-derives on every rebuild.
+	// Stamped onto FC copies, never stored features: colour re-derives on every rebuild.
 	const overlapColors = assignOverlapColors(features);
 	for (let i = 0; i < features.length; i++) {
 		const feat = features[i];
@@ -907,7 +899,6 @@ export function projectLnglatBbox(
 	return { minX, minY, maxX, maxY };
 }
 
-/** Screen-space bbox of a completed feature's geometry. */
 export function projectFeatureBbox(
 	map: MapboxMap,
 	feature: Feature,
@@ -924,7 +915,7 @@ export function projectFeatureBbox(
 	return projectLnglatBbox(map, coords);
 }
 
-// Pins own their own clicks as DOM markers; 12px because thin lines are unhittable at tap precision.
+// 12px: thin lines are unhittable at tap precision.
 export function hitTestCompleted(
 	map: MapboxMap,
 	point: { x: number; y: number },

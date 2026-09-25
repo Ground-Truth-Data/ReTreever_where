@@ -1,4 +1,4 @@
-// Prototype patches that keep NaN out of Mapbox's non-camera paths; safeMap.ts covers the camera.
+// Prototype patches keeping NaN out of Mapbox's non-camera paths (safeMap.ts covers the camera).
 
 import type {
 	Feature,
@@ -78,7 +78,6 @@ export function installPopupNanGuard(): void {
 	);
 }
 
-// Only Point geometries are checked; NaN lines/polygons would need a deeper walk.
 function filterFiniteFeatures(
 	data: FeatureCollection<Geometry, GeoJsonProperties> | Feature | unknown,
 ): typeof data {
@@ -176,7 +175,7 @@ export function installAddSourceNanGuard(): void {
 	(proto as Record<symbol, unknown>)[ADDSOURCE_INSTALLED] = true;
 }
 
-// The per-frame occlusion fade throws on a momentarily degenerate transform; cosmetic, so a bad frame keeps the previous opacity.
+// Cosmetic: a bad frame just keeps the previous opacity.
 let opacityGuardLogged = false;
 export function installMarkerOpacityGuard(): void {
 	const proto = mapboxgl?.Marker?.prototype as unknown as
@@ -206,7 +205,6 @@ export function installMarkerOpacityGuard(): void {
 	(proto as Record<symbol, unknown>)[OPACITY_INSTALLED] = true;
 }
 
-// One try/catch under the whole frame rather than one per Mapbox throw site.
 let renderGuardLogged = false;
 export function installRenderGuard(): void {
 	const proto = mapboxgl?.Map?.prototype as unknown as
@@ -236,7 +234,7 @@ export function installRenderGuard(): void {
 	(proto as Record<symbol, unknown>)[RENDER_INSTALLED] = true;
 }
 
-// coveringTiles runs outside _render, so the render guard misses it; patches the shared prototype off a live map instead.
+// Runs outside _render, so the render guard misses it; patches the shared prototype off a live map instead.
 let coveringTilesGuardLogged = false;
 export function installCoveringTilesGuard(map: unknown): void {
 	const tf = (map as { transform?: unknown } | null)?.transform;
@@ -254,7 +252,7 @@ export function installCoveringTilesGuard(map: unknown): void {
 		try {
 			return (original as (...a: unknown[]) => unknown).apply(this, args);
 		} catch (err) {
-			// codestyle-allow-swallow: a degenerate-camera throw inside coveringTiles is suppressed + logged once; the next good tick recomputes tiles
+			// codestyle-allow-swallow: suppressed + logged once; the next good tick recomputes
 			if (!coveringTilesGuardLogged) {
 				coveringTilesGuardLogged = true;
 				console.error(
@@ -272,7 +270,7 @@ export function installCoveringTilesGuard(map: unknown): void {
 	(proto as Record<symbol, unknown>)[COVERINGTILES_INSTALLED] = true;
 }
 
-// Mapbox's internal mousemove handler throws on a briefly degenerate transform; a (0,0) sentinel for one frame is harmless.
+// Mapbox's mousemove handler throws on a briefly degenerate transform; (0,0) is harmless.
 export function installUnprojectNanGuard(): void {
 	const MapCtor = (
 		mapboxgl as unknown as {

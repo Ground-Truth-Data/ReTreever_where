@@ -55,7 +55,6 @@ interface Stats {
 	maxVisited: number;
 }
 
-/** Priority score: higher is placed first and keeps its label. */
 export function score(area: LabelArea, mode: PrioMode, stats: Stats): number {
 	const vSpan = stats.maxVisited - stats.minVisited || 1;
 	const recency = (stats.maxVisited - area.visitedDaysAgo) / vSpan;
@@ -73,7 +72,6 @@ function overlapArea(a: PlacedBox, b: PlacedBox): number {
 	return ox * oy;
 }
 
-/** Exported so the renderer can run follow-on tiers against the same reserved space. */
 export function collidesWithPlaced(
 	box: PlacedBox,
 	placed: PlacedBox[],
@@ -87,7 +85,6 @@ export interface LayoutResult {
 	placed: PlacedBox[];
 }
 
-/** Highest priority first; the selected area is forced and always keeps its label. */
 export function layoutLabels(
 	areas: LabelArea[],
 	opts: LayoutOpts,
