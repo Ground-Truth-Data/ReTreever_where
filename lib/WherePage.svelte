@@ -24,7 +24,6 @@ import closeRaw from "./whereAssets/close-button.svg?raw";
 import photoFrameRaw from "./whereAssets/around-me-photo-frame.svg?raw";
 import zoomPanelRaw from "./whereAssets/zoom-panel.svg?raw";
 
-// Imported, never a leading-slash URL: that resolves against the host, not the bundle.
 import markerUrl from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg";
 import toolPolygon from "./assets/pub-Rtvr/where/tool-polygon.webp";
 import toolAroundMe from "./assets/pub-Rtvr/where/tool-around-me.webp";
@@ -36,7 +35,6 @@ import toolPlus from "./whereAssets/tool-plus.svg";
 import toolMinus from "./whereAssets/tool-minus.svg";
 import toolTree from "$gc/assets/tree_white.webp";
 
-// Page chrome for /where; anything reaching outside the page arrives as a prop.
 let {
 	initialFeatures = [],
 	onFeatureComplete,
@@ -50,18 +48,13 @@ let {
 	basePath = "/where",
 }: {
 	initialFeatures?: Feature[];
-	/** The route persists it. */
 	onFeatureComplete?: (feature: Feature) => void;
-	/** The route clears storage. Nothing triggers it today (docs/WHERE_TODO.md). */
 	onFeaturesCleared?: () => void;
 	favourites?: FavouriteLocation[];
-	/** Where the marker box links to; with none passed the links don't render. */
 	routes?: WhereRoutes;
 	ensureMapboxGuards?: () => Promise<void>;
 	polygonsUrl?: string;
-	/** The route owns the stored list. */
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
-	/** The URL's view segment; null on bare /where. */
 	view?: WhereView | null;
 	basePath?: string;
 } = $props();
@@ -112,7 +105,6 @@ $effect(() => {
 	};
 });
 
-/** Nothing on the panel owns "clear" yet (docs/WHERE_TODO.md). */
 export function clearDrawings() {
 	drawApi?.clearAll();
 	onFeaturesCleared?.();
@@ -124,7 +116,6 @@ function pickDrawTool(mode: "polygon") {
 	drawApi?.setMode(mode);
 }
 
-/** Same view again → bare basePath. Query and hash ride along so a deep link and the camera survive. */
 function viewHref(target: WhereView): string {
 	const path = view === target ? basePath : `${basePath}/${target}`;
 	return `${path}${$page.url.search}${$page.url.hash}`;
@@ -151,7 +142,6 @@ function cycleStyle() {
 	map.setStyle(defaultStyleOptions[styleIdx].styleUrl);
 }
 
-/** Once located, a second press flies there instead of re-asking. */
 function toggleAroundMe() {
 	favouritesOpen = false;
 	aroundMeStatus = "";
@@ -173,7 +163,6 @@ function toggleFavouritesPanel() {
 	favouritesOpen = !favouritesOpen;
 }
 
-/** Drawn shapes are deliberately not cleared here. */
 function resetView() {
 	aroundMeOpen = false;
 	favouritesOpen = false;
@@ -294,7 +283,6 @@ let detailsHref = $derived(
 		: (routes.what ?? null),
 );
 
-/** null, not a fallback: an org-labelled link to an unfiltered list is worse than no link. */
 let orgHref = $derived(
 	selectedFeature?.organizationKey && routes.whoOrg
 		? routes.whoOrg(selectedFeature.organizationKey)
@@ -413,7 +401,6 @@ let orgHref = $derived(
 			<span class="tool-tip tool-tip-left">Around Me</span>
 		</button>
 
-		<!-- Below the panel, not inside it: the panel art is five fixed cutouts. -->
 		{#if viewChanged || selectedFeature}
 			<button
 				type="button"
@@ -636,7 +623,6 @@ let orgHref = $derived(
 		z-index: 20;
 		display: flex;
 		flex-direction: column;
-		/* Any padding shifts the five rows off the art's five slots. */
 		padding: 0;
 		box-sizing: border-box;
 	}
@@ -676,7 +662,6 @@ let orgHref = $derived(
 		flex: 1;
 		text-decoration: none;
 		color: inherit;
-		/* Otherwise icon intrinsic size becomes the flex minimum and the column overflows. */
 		min-height: 0;
 		background: none;
 		border: none;
@@ -713,13 +698,11 @@ let orgHref = $derived(
 		max-width: 80%;
 	}
 
-	/* Two classes so it outranks .tool-tip's `left`, declared later. */
 	.tool-tip.tool-tip-left {
 		left: auto;
 		right: calc(100% + 10px);
 	}
 
-	/* Clear of the gold border's corner notch (x ≥ 89%, y ≥ 92%). */
 	.around-btn {
 		position: absolute;
 		right: 3.2%;
@@ -795,7 +778,6 @@ let orgHref = $derived(
 
 	.reset-btn {
 		position: absolute;
-		/* Centred on the tool panel's column (left 0.8% + half its 8.8%). */
 		left: 5.2%;
 		top: 59%;
 		transform: translateX(-50%);

@@ -28,7 +28,6 @@ let {
 	selectedFeature: any;
 	viewChanged?: boolean;
 	markerUrl?: string;
-	/** Full URL returning polygon GeoJSON. */
 	polygonsUrl?: string;
 	userLocation?: [number, number] | null;
 	/** Must patch mapbox's prototypes before the first `new Map`. */
@@ -37,7 +36,6 @@ let {
 
 let mapContainer: HTMLDivElement;
 let splashVisible = $state(true);
-// The deep-link target may resolve before or after the map.
 let pendingFeature: any = null;
 
 const HOME_CENTER: [number, number] = fullMapOptions.initialCenter ?? [
@@ -69,7 +67,6 @@ function flyToAndSelect(m: import("mapbox-gl").Map, feature: any) {
 	}
 }
 
-/** Ignores centre: auto-rotation would read as "changed" every frame. */
 function syncViewChanged() {
 	const m = map;
 	if (!m) return;
@@ -83,7 +80,6 @@ export function resetView() {
 	selectedFeature = null;
 	pendingFeature = null;
 
-	// Leaving ?land=/?projectName= re-flies to the old polygon on refresh.
 	const url = new URL($page.url);
 	url.searchParams.delete("land");
 	url.searchParams.delete("projectName");
@@ -101,7 +97,6 @@ export function resetView() {
 	}
 	safeEase(m, { center: HOME_CENTER, zoom: homeZoom, duration: 1600 });
 
-	// Clearing the hash earlier gets rewritten by the ease's own moveends.
 	const stripHash = () => {
 		if (m.getZoom() >= SPIN_MAX_ZOOM) return;
 		m.off("moveend", stripHash);
@@ -113,7 +108,6 @@ export function resetView() {
 	m.on("moveend", stripHash);
 }
 
-// Circle layers, not a DOM marker, so the dot doesn't drift during the ease.
 const USER_DOT_SOURCE = "rt-user-location";
 
 function pointFeature(coords: [number, number]) {
@@ -137,7 +131,6 @@ $effect(() => {
 	// A style swap wipes source and layers, hence `styledata` too.
 	function draw() {
 		if (!m || !loc) return;
-		// Plain JSON: a $state proxy corrupts the GL worker transfer.
 		const data = pointFeature([loc[0], loc[1]]);
 		const existing = m.getSource(USER_DOT_SOURCE) as
 			| import("mapbox-gl").GeoJSONSource
@@ -186,7 +179,6 @@ $effect(() => {
 	};
 });
 
-// Otherwise a trackpad pinch zooms the page instead of the map.
 function blockBrowserZoom() {
 	const blockWheel = (e: WheelEvent) => {
 		if (e.ctrlKey) e.preventDefault();
@@ -234,7 +226,6 @@ onMount(() => {
 		const handleFeatureSelect = (feature: any) => {
 			selectedFeature = feature;
 			if (feature?.landKey) {
-				// Current pathname, so /where/orgs keeps its view segment.
 				const base = $page.url.pathname;
 				goto(`${base}?land=${encodeURIComponent(feature.landKey)}`, {
 					replaceState: true,
@@ -245,7 +236,6 @@ onMount(() => {
 
 		mapCleanup = initializeMap(mapContainer, {
 			...fullMapOptions,
-			// The page draws its own zoom buttons and style switcher.
 			showNavigation: false,
 			showStyleControl: false,
 			showScale: true,
@@ -330,7 +320,6 @@ onMount(() => {
 {/if}
 
 <style>
-	/* Corner placement is fixed by Mapbox at construction (`creditsSplit`); CSS only styles the container. */
 	:global(.mapboxgl-ctrl-bottom-left) {
 		z-index: 2;
 		display: flex;
@@ -340,7 +329,6 @@ onMount(() => {
 		padding: 0 0 26px 22px;
 	}
 
-	/* Offsets are read off gold-border.svg's notch (y=91.8%, x=89.2%→91.1%). */
 	:global(.mapboxgl-ctrl-bottom-right) {
 		display: flex;
 		flex-direction: column;
@@ -351,7 +339,6 @@ onMount(() => {
 		padding: 0 0.9% 1.1% 0;
 	}
 
-	/* cqw, not px: fixed px slid the readout under the gold line below ~1400px. */
 	:global(.mapboxgl-ctrl-bottom-right .rt-zoom-readout) {
 		padding: 3px max(4px, 0.35cqw);
 		font-size: max(9px, 0.78cqw);
