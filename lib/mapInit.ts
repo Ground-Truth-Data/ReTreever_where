@@ -36,7 +36,6 @@ function startRotation(
     // setLocationAtPoint → _updateZoomFromElevation and blows the stack.
     let raf = 0;
     let lastT = 0;
-    // Reset a corrupt camera once, not every frame.
     let cameraRecovered = false;
 
     function step(t: number) {
@@ -44,8 +43,7 @@ function startRotation(
         const dt = lastT ? Math.min((t - lastT) / 1000, 0.1) : 0;
         lastT = t;
 
-        // isMoving/isZooming/isRotating cover gestures an event list misses
-        // (pinch's first touchend, wheel zoom); the ref is only the mousedown override.
+        // Covers gestures an event list misses (pinch's first touchend, wheel zoom).
         const userDrivingCamera =
             userInteractingRef.current ||
             map.isMoving() ||
@@ -90,7 +88,6 @@ function startRotation(
     });
 }
 
-/** Returns a cleanup function that removes the map. */
 export function initializeMap(
     container: HTMLDivElement,
     options: MapOptions = {},
@@ -116,7 +113,6 @@ export function initializeMap(
             `Free tokens: https://account.mapbox.com/access-tokens/`;
         console.error(msg);
 
-        // A blank rectangle reads as "broken", not "unconfigured".
         const note = document.createElement("div");
         note.style.cssText =
             "padding:1rem;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;" +
@@ -134,8 +130,7 @@ export function initializeMap(
 
     const userInteractingRef = { current: false };
 
-    // The transform must be born finite: mapbox's mousemove handler throws on a
-    // NaN camera before the watchdog below can repair it.
+    // The transform must be born finite: mapbox's mousemove handler throws on a NaN camera.
     const safeCenter: [number, number] = isCoord(opts.initialCenter)
         ? ([opts.initialCenter[0], opts.initialCenter[1]] as [number, number])
         : ([
@@ -163,8 +158,7 @@ export function initializeMap(
             ? { transformRequest: opts.transformRequest }
             : {}),
         hash: false,
-        // Credit controls can't be moved after construction; the attribution has
-        // no logoPosition equivalent, so it's re-added by hand below.
+        // Credit controls can't be moved after construction; re-added by hand below.
         ...(opts.creditsSplit
             ? {
                   logoPosition: "bottom-right" as const,
@@ -180,10 +174,8 @@ export function initializeMap(
         preserveDrawingBuffer: MAP_PRESERVE_DRAWING_BUFFER,
     });
 
-    // Right after construction, before any source 'data' event can land.
     installCoveringTilesGuard(map);
 
-    // Browser-automation handle for aiming the camera.
     if (import.meta.env.DEV) {
         (window as unknown as Record<string, unknown>).__rtMap = map;
     }
@@ -193,8 +185,7 @@ export function initializeMap(
     map.dragRotate.disable();
     map.touchZoomRotate.disableRotation();
 
-    // iOS WebKit reclaims the GL context under memory pressure and mapbox-gl
-    // never rebuilds it; `webglcontextrestored` only fires if the loss was preventDefault'd.
+    // iOS WebKit reclaims the GL context under memory pressure; `webglcontextrestored` needs preventDefault() on loss.
     const glCanvas = map.getCanvas();
     const onContextLost = (e: Event) => {
         e.preventDefault();
@@ -208,8 +199,7 @@ export function initializeMap(
     glCanvas.addEventListener("webglcontextlost", onContextLost, false);
     glCanvas.addEventListener("webglcontextrestored", onContextRestored, false);
 
-    // A pointer/resize event while the container is momentarily 0×0 (popover,
-    // iOS keyboard) leaves a NaN camera or a 0×0 canvas that never self-repairs.
+    // A resize while the container is momentarily 0×0 (popover, iOS keyboard) leaves a NaN camera that never self-repairs.
     let lastGoodCenter: [number, number] = safeCenter;
     let lastGoodZoom = safeZoom;
     let unhealthySince: number | null = null;
@@ -274,14 +264,12 @@ export function initializeMap(
     if (!opts.scrollZoom) {
         map.scrollZoom.disable();
     } else {
-        // Mapbox default 1/450 ≈ 1 zoom level per trackpad swipe; 1/60 ≈ 7–8.
         map.scrollZoom.setWheelZoomRate(1 / 60);
         map.scrollZoom.setZoomRate(1 / 35);
     }
 
     if (opts.autoRotate) {
-        // map.stop() freezes the globe synchronously; the rAF step alone would
-        // slide the world one more frame and the click would miss its target.
+        // map.stop() freezes the globe synchronously — the rAF step alone would slide one more frame and miss the click.
         map.on("mousedown", () => {
             userInteractingRef.current = true;
             map.stop();
@@ -292,8 +280,7 @@ export function initializeMap(
             opts.onUserInteractionEnd?.();
         });
 
-        // The first touchend arrives while the second finger is still pinching;
-        // release only when the last finger lifts.
+        // The first touchend arrives while the second finger is still pinching.
         map.on("touchstart", () => {
             userInteractingRef.current = true;
             map.stop();
@@ -320,7 +307,6 @@ export function initializeMap(
         });
     }
 
-    // style.load fires after setStyle too, so the toggle re-applies these.
     if (opts.globeProjection || opts.hideLabels) {
         map.on("style.load", () => {
             if (opts.globeProjection) {
@@ -404,7 +390,6 @@ export function initializeMap(
         );
     }
 
-    // Debug aid: the URL hash only syncs above maxSpinZoom.
     if (opts.showZoomReadout) {
         const readout = document.createElement("div");
         readout.className = "mapboxgl-ctrl rt-zoom-readout";

@@ -1,16 +1,10 @@
-// The only sanctioned way to mutate the Mapbox camera: one NaN corrupts the
-// camera for every later call. Direct calls fail `vite build` (the noRawCamera
-// guard); a line that genuinely cannot use a wrapper is annotated `// camera-allow-raw: <why>`.
-
-// Structural, not `import { Map }`: two hoisted mapbox-gl copies make the
-// nominal Map types incompatible across the boundary.
+// The only sanctioned way to mutate the camera — `vite build`'s noRawCamera guard fails direct calls; escape hatch: `// camera-allow-raw: <why>`.
 type CameraMap = {
     flyTo(opts: Record<string, unknown>): void;
     fitBounds(
         bounds: [[number, number], [number, number]],
         opts?: Record<string, unknown>,
     ): void;
-    // fitBounds' zoom math without mutating; undefined on a 0×0 canvas.
     cameraForBounds?(
         bounds: [[number, number], [number, number]],
         opts?: Record<string, unknown>,
@@ -160,8 +154,7 @@ export function safeFitBounds(
         reportRejection("fitBounds", "duration is not finite");
         return;
     }
-    // Padding that exceeds the viewport makes the derived zoom NaN, and NaN
-    // survives Mapbox's min/max clamp.
+    // Padding that exceeds the viewport makes the derived zoom NaN, which survives Mapbox's clamp.
     if (map.cameraForBounds) {
         const cam = map.cameraForBounds(
             [

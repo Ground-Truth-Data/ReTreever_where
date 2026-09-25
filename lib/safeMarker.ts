@@ -1,6 +1,4 @@
-// Prototype patches that keep NaN out of Mapbox's non-camera paths (markers,
-// popups, sources, the render loop). safeMap.ts covers the camera. Each guard
-// is idempotent and logs once. Call installMapboxNanGuards() once at mount.
+// Prototype patches that keep NaN out of Mapbox's non-camera paths; safeMap.ts covers the camera.
 
 import type {
 	Feature,
@@ -140,7 +138,6 @@ export function installGeoJSONSourceNanGuard(): void {
 	(proto as Record<symbol, unknown>)[SOURCE_INSTALLED] = true;
 }
 
-// The initial `data` of addSource never passes through setData.
 export function installAddSourceNanGuard(): void {
 	const proto = (
 		mapboxgl as unknown as {
@@ -179,8 +176,7 @@ export function installAddSourceNanGuard(): void {
 	(proto as Record<symbol, unknown>)[ADDSOURCE_INSTALLED] = true;
 }
 
-// The per-frame occlusion fade throws on a momentarily degenerate transform
-// even with a valid lnglat; it is cosmetic, so a bad frame keeps the previous opacity.
+// The per-frame occlusion fade throws on a momentarily degenerate transform; cosmetic, so a bad frame keeps the previous opacity.
 let opacityGuardLogged = false;
 export function installMarkerOpacityGuard(): void {
 	const proto = mapboxgl?.Marker?.prototype as unknown as
@@ -210,8 +206,7 @@ export function installMarkerOpacityGuard(): void {
 	(proto as Record<symbol, unknown>)[OPACITY_INSTALLED] = true;
 }
 
-// One try/catch under the whole frame rather than one per Mapbox throw site;
-// a bad frame is skipped and the next good one redraws.
+// One try/catch under the whole frame rather than one per Mapbox throw site.
 let renderGuardLogged = false;
 export function installRenderGuard(): void {
 	const proto = mapboxgl?.Map?.prototype as unknown as
@@ -241,9 +236,7 @@ export function installRenderGuard(): void {
 	(proto as Record<symbol, unknown>)[RENDER_INSTALLED] = true;
 }
 
-// coveringTiles runs in the geojson worker-callback path, outside _render, so
-// the render guard never sees it. Transform isn't exported, so this patches the
-// prototype off a live map; that prototype is shared, so one call guards all maps.
+// coveringTiles runs outside _render, so the render guard misses it; patches the shared prototype off a live map instead.
 let coveringTilesGuardLogged = false;
 export function installCoveringTilesGuard(map: unknown): void {
 	const tf = (map as { transform?: unknown } | null)?.transform;
@@ -279,8 +272,7 @@ export function installCoveringTilesGuard(map: unknown): void {
 	(proto as Record<symbol, unknown>)[COVERINGTILES_INSTALLED] = true;
 }
 
-// Mapbox's internal mousemove handler unprojects the cursor and throws on a
-// briefly degenerate transform; a (0,0) sentinel for one frame is harmless.
+// Mapbox's internal mousemove handler throws on a briefly degenerate transform; a (0,0) sentinel for one frame is harmless.
 export function installUnprojectNanGuard(): void {
 	const MapCtor = (
 		mapboxgl as unknown as {
