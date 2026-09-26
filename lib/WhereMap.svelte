@@ -10,10 +10,7 @@ import {
 import { defaultOptions } from "./MAP_CONFIG";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
-import {
-	toCoordFromArray,
-	type Coord,
-} from "./coord";
+import { featureCoord } from "./coord";
 
 let {
 	map = $bindable(null),
@@ -49,22 +46,8 @@ const SPIN_MAX_ZOOM = 4;
 
 function flyToAndSelect(m: import("mapbox-gl").Map, feature: any) {
 	selectedFeature = feature;
-	// centroid may be a JSON string: Mapbox serializes feature properties.
-	let raw: unknown = null;
-	if (feature?.geometry?.coordinates) {
-		raw = feature.geometry.coordinates;
-	} else if (feature?.centroid?.coordinates) {
-		raw = feature.centroid.coordinates;
-	} else if (typeof feature?.centroid === "string") {
-		try {
-			raw = JSON.parse(feature.centroid)?.coordinates ?? null;
-			// codestyle-allow-swallow: malformed centroid string leaves raw null; the ease is skipped
-		} catch {}
-	}
-	const coords: Coord | null = toCoordFromArray(raw);
-	if (coords) {
-		safeEase(m, { center: coords, zoom: 14, duration: 1200 });
-	}
+	const coords = featureCoord(feature);
+	if (coords) safeEase(m, { center: coords, zoom: 14, duration: 1200 });
 }
 
 function syncViewChanged() {

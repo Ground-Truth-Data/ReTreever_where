@@ -8,6 +8,7 @@ import { fullMapOptions } from "./MAP_CONFIG";
 import type { WhereView } from "../params/whereView";
 import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
+import { featureCoord } from "./coord";
 import {
 	formatTransparencyScore,
 	type FavouriteLocation,
@@ -38,7 +39,6 @@ import toolTree from "$gc/assets/tree_white.webp";
 let {
 	initialFeatures = [],
 	onFeatureComplete,
-	onFeaturesCleared,
 	favourites = [],
 	ontogglefavourite,
 	routes = {},
@@ -49,7 +49,6 @@ let {
 }: {
 	initialFeatures?: Feature[];
 	onFeatureComplete?: (feature: Feature) => void;
-	onFeaturesCleared?: () => void;
 	favourites?: FavouriteLocation[];
 	routes?: WhereRoutes;
 	ensureMapboxGuards?: () => Promise<void>;
@@ -72,7 +71,6 @@ let drawApi: WhereDrawControls | undefined = $state();
 let mapApi: WhereMap | undefined = $state();
 let viewChanged = $state(false);
 
-const toolsVisible = true;
 /** Never `true` on load: it would nag for location permission on every visit. */
 let aroundMeOpen = $state(false);
 let favouritesOpen = $state(false);
@@ -104,11 +102,6 @@ $effect(() => {
 		cancelled = true;
 	};
 });
-
-export function clearDrawings() {
-	drawApi?.clearAll();
-	onFeaturesCleared?.();
-}
 
 function pickDrawTool(mode: "polygon") {
 	aroundMeOpen = false;
@@ -232,24 +225,6 @@ async function searchArea(event: SubmitEvent) {
 	}
 }
 
-// centroid may be a JSON string: Mapbox serializes feature properties.
-function featureLngLat(f: any): [number, number] | null {
-	let raw: unknown = null;
-	if (f?.geometry?.coordinates) raw = f.geometry.coordinates;
-	else if (f?.centroid?.coordinates) raw = f.centroid.coordinates;
-	else if (typeof f?.centroid === "string") {
-		try {
-			raw = JSON.parse(f.centroid)?.coordinates ?? null;
-			// codestyle-allow-swallow: malformed centroid just disables favouriting for this feature
-		} catch {}
-	}
-	if (!Array.isArray(raw) || raw.length < 2) return null;
-	const [lng, lat] = raw as [unknown, unknown];
-	if (typeof lng !== "number" || typeof lat !== "number") return null;
-	if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-	return [lng, lat];
-}
-
 let selectedIsFavourite = $derived(
 	!!selectedFeature?.landKey &&
 		favourites.some((f) => f.landKey === selectedFeature.landKey),
@@ -257,7 +232,7 @@ let selectedIsFavourite = $derived(
 
 function toggleSelectedFavourite() {
 	if (!selectedFeature?.landKey) return;
-	const coords = featureLngLat(selectedFeature);
+	const coords = featureCoord(selectedFeature);
 	if (!coords) return;
 	ontogglefavourite?.({
 		landKey: selectedFeature.landKey,
@@ -315,7 +290,6 @@ let orgHref = $derived(
 		{@html goldBorderRaw}
 	</div>
 
-	{#if toolsVisible}
 		<div class="tool-panel">
 			<div class="tool-panel-bg" aria-hidden="true">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -579,9 +553,6 @@ let orgHref = $derived(
 				</a>
 			</aside>
 		{/if}
-	{/if}
-
-
 </div>
 
 <style>

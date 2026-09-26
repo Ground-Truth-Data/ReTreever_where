@@ -9,7 +9,6 @@ type CameraMap = {
         bounds: [[number, number], [number, number]],
         opts?: Record<string, unknown>,
     ): { zoom?: number } | null | undefined;
-    easeTo(opts: Record<string, unknown>): void;
     jumpTo(opts: Record<string, unknown>): void;
     stop(): void;
     getCenter(): { lng: number; lat: number };
@@ -17,17 +16,6 @@ type CameraMap = {
 };
 
 import { type Coord, isCoord } from "./coord";
-
-export { isCoord, toCoord, toCoordFromLngLat, toCoordFromArray, toCoordFromFeature } from "./coord";
-export type { Coord };
-
-export const isFiniteCoord = isCoord;
-
-export function isFiniteLngLat(
-    p: { lng: number; lat: number } | null | undefined,
-): p is { lng: number; lat: number } {
-    return !!p && Number.isFinite(p.lng) && Number.isFinite(p.lat);
-}
 
 type CoordInput = Coord | readonly [number, number] | [number, number];
 
@@ -80,7 +68,7 @@ function reportRejection(method: string, reason: string): void {
     }
 }
 
-export type SafeFlyToOptions = {
+type SafeFlyToOptions = {
     center: CoordInput;
     zoom?: number;
     bearing?: number;
@@ -92,8 +80,8 @@ export type SafeFlyToOptions = {
     essential?: boolean;
 };
 
-export function safeFlyTo(map: CameraMap, opts: SafeFlyToOptions): void {
-    if (!isFiniteCoord(opts.center)) {
+function safeFlyTo(map: CameraMap, opts: SafeFlyToOptions): void {
+    if (!isCoord(opts.center)) {
         reportRejection("flyTo", "center is not finite");
         return;
     }
@@ -115,7 +103,7 @@ export function safeFlyTo(map: CameraMap, opts: SafeFlyToOptions): void {
     map.flyTo(opts);
 }
 
-export type SafeFitBoundsOptions = {
+type SafeFitBoundsOptions = {
     padding?:
         | number
         | { top?: number; bottom?: number; left?: number; right?: number };
@@ -180,7 +168,7 @@ export function safeFitBounds(
     );
 }
 
-export type SafeJumpToOptions = {
+type SafeJumpToOptions = {
     center?: CoordInput;
     zoom?: number;
     bearing?: number;
@@ -188,7 +176,7 @@ export type SafeJumpToOptions = {
 };
 
 export function safeJumpTo(map: CameraMap, opts: SafeJumpToOptions): void {
-    if (opts.center !== undefined && !isFiniteCoord(opts.center)) {
+    if (opts.center !== undefined && !isCoord(opts.center)) {
         reportRejection("jumpTo", "center is not finite");
         return;
     }
@@ -197,50 +185,4 @@ export function safeJumpTo(map: CameraMap, opts: SafeJumpToOptions): void {
         return;
     }
     map.jumpTo(opts);
-}
-
-export type SafeEaseToOptions = {
-    center?: CoordInput;
-    zoom?: number;
-    bearing?: number;
-    pitch?: number;
-    duration?: number;
-    padding?: { top?: number; bottom?: number; left?: number; right?: number };
-    essential?: boolean;
-};
-
-export function safeEaseTo(map: CameraMap, opts: SafeEaseToOptions): void {
-    if (opts.center !== undefined && !isFiniteCoord(opts.center)) {
-        reportRejection("easeTo", "center is not finite");
-        return;
-    }
-    if (opts.zoom !== undefined && !isFiniteNumber(opts.zoom)) {
-        reportRejection("easeTo", "zoom is not finite");
-        return;
-    }
-    if (opts.duration !== undefined && !isFiniteNumber(opts.duration)) {
-        reportRejection("easeTo", "duration is not finite");
-        return;
-    }
-    if (!ensureCleanCamera(map, opts.center, opts.zoom)) return;
-
-    map.stop();
-    map.easeTo(opts);
-}
-
-// Throws on a momentarily degenerate transform; null means skip this frame.
-export function safeGetBounds<T>(map: {
-    getZoom(): number;
-    getBounds(): T;
-}): T | null {
-    if (!isFiniteNumber(map.getZoom())) {
-        reportRejection("getBounds", "camera zoom is not finite");
-        return null;
-    }
-    try {
-        return map.getBounds();
-    } catch (e) {
-        reportRejection("getBounds", String(e));
-        return null;
-    }
 }

@@ -9,7 +9,6 @@ import type { Snippet } from "svelte";
 type HostProps = {
 	initialFeatures?: Feature[];
 	onFeatureComplete?: (feature: Feature) => void;
-	onFeaturesCleared?: () => void;
 	favourites?: FavouriteLocation[];
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 	routes?: WhereRoutes;
