@@ -43,7 +43,7 @@ $effect(() => {
 	const m = map;
 	if (!m) return;
 	if (!m.getSource("completed-features")) {
-		setupDrawSourcesAndLayers(m, getAccentColor(), true, () => {
+		setupDrawSourcesAndLayers(m, getAccentColor(), () => {
 			setSource("completed-features", buildCompletedFC(features));
 		});
 		return;
@@ -55,7 +55,7 @@ $effect(() => {
 	if (!map) return;
 	setSource("draw-edges", buildDrawEdgesFC(vertices));
 	setSource("draw-vertices", buildDrawVerticesFC(vertices));
-	setSource("provisional-polygon", buildProvisionalPolygonFC(vertices, "polygon"));
+	setSource("provisional-polygon", buildProvisionalPolygonFC(vertices));
 });
 
 function finish() {
@@ -119,13 +119,5 @@ export function setMode(mode: DrawIntent) {
 	if (map && vertices.length) clearInProgressSources(map);
 	vertices = [];
 	drawIntent = mode;
-}
-
-export function clearAll() {
-	features = [];
-	vertices = [];
-	if (map) clearInProgressSources(map);
-	drawIntent = null;
-	setSource("completed-features", buildCompletedFC([]));
 }
 </script>
