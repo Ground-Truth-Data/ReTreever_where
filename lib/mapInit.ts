@@ -93,7 +93,7 @@ export function initializeMap(
     options: MapOptions = {},
 ): () => void {
     const opts = { ...defaultOptions, ...options };
-    const mapboxAccessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+    const mapboxAccessToken = import.meta.env.PUBLIC_GC_RT_mapbox_token;
     const maxSpinZoom = MAP_CONFIG.globe.maxSpinZoom;
 
     if (opts.enableHash && typeof window !== "undefined") {
@@ -105,7 +105,7 @@ export function initializeMap(
     }
 
     if (!mapboxAccessToken) {
-        const name = "VITE_MAPBOX_TOKEN";
+        const name = "PUBLIC_GC_RT_mapbox_token";
         const msg =
             `${name} is not set, so no map can be created.\n` +
             `Copy .env.example to .env and paste in a token, then restart the dev server.\n` +

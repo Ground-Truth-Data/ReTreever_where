@@ -188,11 +188,11 @@ async function searchArea(event: SubmitEvent) {
 	if (!map || !q) return;
 	aroundMeStatus = "Searching…";
 	try {
-		const token = import.meta.env.VITE_MAPBOX_TOKEN;
+		const token = import.meta.env.PUBLIC_GC_RT_mapbox_token;
 		// An interpolated `undefined` builds a 401 URL whose catch reads as a network blip.
 		if (!token) {
 			aroundMeStatus =
-				"VITE_MAPBOX_TOKEN is not set — add it to rapper/.env and restart.";
+				"PUBLIC_GC_RT_mapbox_token is not set — add it to rapper/.env and restart.";
 			return;
 		}
 		const url =
