@@ -1,5 +1,6 @@
 <script lang="ts">
 // /where's own draw engine: it draws a shape and hands it back, nothing more.
+import { untrack } from "svelte";
 import type { Map as MapboxMap } from "mapbox-gl";
 import type { Feature } from "geojson";
 import {
@@ -27,7 +28,7 @@ let {
 	onFeatureComplete?: (feature: Feature) => void;
 } = $props();
 
-let features = $state<Feature[]>([...initialFeatures]);
+let features = $state<Feature[]>(untrack(() => [...initialFeatures]));
 let vertices = $state<Lnglat[]>([]);
 
 function setSource(id: string, data: ReturnType<typeof buildCompletedFC>) {
