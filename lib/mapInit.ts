@@ -10,6 +10,7 @@ import {
     defaultStyleOptions,
     styleIdFromUrl,
 } from "./mapControlBaseToggle";
+import { addMarkersLayer } from "./mapLayerPolygon";
 import type { MapOptions } from "./mapTypes";
 import { applyNaturalOverrides, NATURAL_FOG } from "./mapStyleNatural";
 import { parseMapHash, setMapHash } from "./mapUtilsHash";
@@ -438,6 +439,7 @@ export function initializeMap(
 
     map.on("load", async () => {
         map.resize();
+        if (opts.loadMarkers) await addMarkersLayer(map, opts);
         if (opts.autoRotate) startRotation(map, opts, userInteractingRef);
         opts.onMapReady?.(map);
     });

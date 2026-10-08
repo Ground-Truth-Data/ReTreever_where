@@ -34,6 +34,9 @@ export interface MapOptions {
     initialZoom?: number;
     initialCenter?: [number, number];
     markerUrl?: string;
+    /** Land GeoJSON endpoint; with `loadMarkers`, draws land pins and polygons. */
+    polygonsUrl?: string;
+    loadMarkers?: boolean;
     style?: string;
     /** Lets a caller rewrite or block every tile/asset request. */
     transformRequest?: mapboxgl.MapboxOptions["transformRequest"];
