@@ -229,6 +229,8 @@ onMount(() => {
 				initialZoom: MOBILE_HOME_ZOOM,
 			}),
 			...(markerUrl && { markerUrl }),
+			loadMarkers: true,
+			polygonsUrl,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;
