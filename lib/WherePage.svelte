@@ -259,8 +259,8 @@ let detailsHref = $derived(
 );
 
 let orgHref = $derived(
-	selectedFeature?.organizationKey && routes.whoOrg
-		? routes.whoOrg(selectedFeature.organizationKey)
+	selectedFeature?.organizationWhoKey && routes.whoOrg
+		? routes.whoOrg(selectedFeature.organizationWhoKey)
 		: null,
 );
 </script>
