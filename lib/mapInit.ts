@@ -1,4 +1,5 @@
 import mapboxgl from "mapbox-gl";
+import "./mapboxWorker";
 import {
     compactGlobeOptions,
     defaultOptions,
