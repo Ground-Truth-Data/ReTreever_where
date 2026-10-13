@@ -1,4 +1,4 @@
-import defaultMarkerUrl from "./assets/mobileAssets/map-marker-osem-people.svg";
+import defaultMarkerSvg from "./assets/mobileAssets/map-marker-osem-people.svg?raw";
 import type { MapOptions } from "./mapTypes";
 
 const markerSize = 28;
@@ -6,7 +6,7 @@ const markerSize = 28;
 export const MAP_CONFIG = {
     markerSize,
     markers: {
-        default: defaultMarkerUrl,
+        default: defaultMarkerSvg,
     },
     styles: {
         defaultSat: "mapbox://styles/mapbox/satellite-streets-v12",

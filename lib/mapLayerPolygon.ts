@@ -302,7 +302,7 @@ export async function addMarkersLayer(
     addClusteredPins(map, {
         id: PINS_ID,
         data: { type: "FeatureCollection", features: centroidFeatures },
-        markerUrl: options.markerUrl,
+        markerSvg: options.markerSvg,
         onPointClick: async (feature) => {
             if (options.compact) return;
             const coordinates = (

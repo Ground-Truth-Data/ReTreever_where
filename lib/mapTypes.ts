@@ -33,7 +33,7 @@ export interface MapOptions {
     scrollZoom?: boolean;
     initialZoom?: number;
     initialCenter?: [number, number];
-    markerUrl?: string;
+    markerSvg?: string;
     /** Land GeoJSON endpoint; with `loadMarkers`, draws land pins and polygons. */
     polygonsUrl?: string;
     loadMarkers?: boolean;

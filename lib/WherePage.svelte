@@ -25,7 +25,7 @@ import closeRaw from "./whereAssets/close-button.svg?raw";
 import photoFrameRaw from "./whereAssets/around-me-photo-frame.svg?raw";
 import zoomPanelRaw from "./whereAssets/zoom-panel.svg?raw";
 
-import markerUrl from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg";
+import markerSvg from "./assets/pub-Rtvr/map-marker-tailWag-ReTreever.svg?raw";
 import toolPolygon from "./assets/pub-Rtvr/where/tool-polygon.webp";
 import toolAroundMe from "./assets/pub-Rtvr/where/tool-around-me.webp";
 import toolFavourites from "./assets/pub-Rtvr/where/tool-favourites.webp";
@@ -271,7 +271,7 @@ let orgHref = $derived(
 		bind:map
 		bind:selectedFeature
 		bind:viewChanged
-		{markerUrl}
+		{markerSvg}
 		{userLocation}
 		{ensureMapboxGuards}
 		{polygonsUrl}

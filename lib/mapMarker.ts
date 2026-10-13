@@ -48,7 +48,7 @@ export interface ClusteredPinsConfig {
     data: FeatureCollection<Geometry, GeoJsonProperties>;
     onPointClick?: (feature: mapboxgl.MapboxGeoJSONFeature) => void;
     clusterRadius?: number;
-    markerUrl?: string;
+    markerSvg?: string;
 }
 
 function stopsExpression(
@@ -88,16 +88,19 @@ function heatmapColorExpression(): mapboxgl.Expression {
     );
 }
 
-async function rasterizeSvg(url: string, sizePx: number): Promise<ImageData> {
-    const img = new Image(sizePx, sizePx);
-    img.crossOrigin = "anonymous";
-    await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () =>
-            reject(new Error(`Failed to load marker SVG: ${url}`));
-        img.src = url;
-    });
-    return drawToImageData(img, sizePx);
+async function rasterizeSvg(markup: string, sizePx: number): Promise<ImageData> {
+    const blobUrl = URL.createObjectURL(new Blob([markup], { type: "image/svg+xml" }));
+    try {
+        const img = new Image(sizePx, sizePx);
+        await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error("Marker SVG failed to decode"));
+            img.src = blobUrl;
+        });
+        return drawToImageData(img, sizePx);
+    } finally {
+        URL.revokeObjectURL(blobUrl);
+    }
 }
 
 function drawToImageData(img: HTMLImageElement, sizePx: number): ImageData {
@@ -170,13 +173,9 @@ function animatedMatrix(root: SVGSVGElement, el: Element): DOMMatrix {
  * `<img>` decode snapshots frame 0 forever.
  */
 async function rasterizeSvgFrames(
-    url: string,
+    markup: string,
     sizePx: number,
 ): Promise<{ frames: ImageData[]; frameMs: number }> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch marker SVG: ${url}`);
-    const markup = await res.text();
-
     // Attached and laid out but off-screen: display:none or a detached node never starts the SMIL clock.
     const host = document.createElement("div");
     host.setAttribute("aria-hidden", "true");
@@ -188,7 +187,7 @@ async function rasterizeSvgFrames(
 
     try {
         const svg = host.querySelector("svg");
-        if (!svg) throw new Error(`No <svg> root in marker: ${url}`);
+        if (!svg) throw new Error("No <svg> root in marker");
         svg.setAttribute("width", String(sizePx));
         svg.setAttribute("height", String(sizePx));
 
@@ -249,7 +248,7 @@ async function rasterizeSvgFrames(
                 await new Promise<void>((resolve, reject) => {
                     img.onload = () => resolve();
                     img.onerror = () =>
-                        reject(new Error(`Frame ${i} failed to decode: ${url}`));
+                        reject(new Error(`Frame ${i} failed to decode`));
                     img.src = blobUrl;
                 });
                 frames.push(drawToImageData(img, sizePx));
@@ -311,7 +310,7 @@ function startIconAnimation(
 async function addDogLayer(
     map: mapboxgl.Map,
     sourceId: string,
-    markerUrl: string,
+    markerSvg: string,
     onPointClick?: (feature: mapboxgl.MapboxGeoJSONFeature) => void,
 ): Promise<void> {
     const iconId = `${sourceId}-dog`;
@@ -323,13 +322,13 @@ async function addDogLayer(
         let frames: ImageData[];
         let frameMs = WAG_FALLBACK_DURATION_MS;
         try {
-            ({ frames, frameMs } = await rasterizeSvgFrames(markerUrl, sizePx));
+            ({ frames, frameMs } = await rasterizeSvgFrames(markerSvg, sizePx));
         } catch (err) {
             console.warn(
                 "[map] animated marker bake failed, using a static icon:",
                 err,
             );
-            frames = [await rasterizeSvg(markerUrl, sizePx)];
+            frames = [await rasterizeSvg(markerSvg, sizePx)];
         }
         if (!isMapAlive(map)) return;
         if (!map.hasImage(iconId)) {
@@ -515,8 +514,7 @@ export function addClusteredPins(
         });
     }
 
-    const markerUrl = config.markerUrl || MAP_CONFIG.markers.default;
-    addDogLayer(map, id, markerUrl, onPointClick).catch((err) =>
+    addDogLayer(map, id, config.markerSvg || MAP_CONFIG.markers.default, onPointClick).catch((err) =>
         console.error("Failed to add dog layer:", err),
     );
 

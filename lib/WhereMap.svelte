@@ -16,7 +16,7 @@ let {
 	map = $bindable(null),
 	selectedFeature = $bindable(null),
 	viewChanged = $bindable(false),
-	markerUrl = undefined,
+	markerSvg = undefined,
 	polygonsUrl,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
@@ -24,7 +24,7 @@ let {
 	map: import("mapbox-gl").Map | null;
 	selectedFeature: any;
 	viewChanged?: boolean;
-	markerUrl?: string;
+	markerSvg?: string;
 	polygonsUrl?: string;
 	userLocation?: [number, number] | null;
 	/** Must patch mapbox's prototypes before the first `new Map`. */
@@ -228,7 +228,7 @@ onMount(() => {
 				showDrawTools: false,
 				initialZoom: MOBILE_HOME_ZOOM,
 			}),
-			...(markerUrl && { markerUrl }),
+			...(markerSvg && { markerSvg }),
 			loadMarkers: true,
 			polygonsUrl,
 			onFeatureSelect: handleFeatureSelect,
