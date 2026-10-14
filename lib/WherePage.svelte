@@ -331,7 +331,7 @@ let orgHref = $derived(
 				onclick={() => pickDrawTool("polygon")}
 			>
 				<img src={toolPolygon} alt="" />
-				<span class="tool-tip">Draw a polygon</span>
+				<span class="tool-tip">Draw a piece</span>
 			</button>
 			<button type="button" class="tool-btn" onclick={cycleStyle}>
 				<img src={toolMap} alt="" class="icon-map" />
