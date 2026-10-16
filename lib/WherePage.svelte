@@ -73,6 +73,8 @@ let viewChanged = $state(false);
 
 /** Never `true` on load: it would nag for location permission on every visit. */
 let aroundMeOpen = $state(false);
+/** A bare dog icon says nothing, and the hover tips never show on touch; the callout stays until the tool is used once this visit. */
+let aroundHintShown = $state(true);
 let favouritesOpen = $state(false);
 let areaQuery = $state("");
 let aroundMeStatus = $state("");
@@ -136,19 +138,20 @@ function cycleStyle() {
 }
 
 function toggleAroundMe() {
+	aroundHintShown = false;
 	favouritesOpen = false;
 	aroundMeStatus = "";
-	if (userLocation) {
-		aroundMeOpen = false;
-		flyToUser();
-		return;
-	}
 	aroundMeOpen = !aroundMeOpen;
 }
 
 function flyToUser() {
 	if (!map || !userLocation) return;
 	safeEase(map, { center: userLocation, zoom: 9, duration: 1600 });
+}
+
+function goToUser() {
+	flyToUser();
+	aroundMeOpen = false;
 }
 
 function toggleFavouritesPanel() {
@@ -368,12 +371,20 @@ let orgHref = $derived(
 			type="button"
 			class="around-btn"
 			class:tool-active={aroundMeOpen}
+			class:is-hinted={aroundHintShown}
 			aria-label="Around Me"
 			onclick={toggleAroundMe}
 		>
 			<img src={toolAroundMe} alt="" />
 			<span class="tool-tip tool-tip-left">Around Me</span>
 		</button>
+
+		{#if aroundHintShown}
+			<button type="button" class="around-hint" onclick={toggleAroundMe}>
+				<strong>Around Me</strong>
+				<span>Jump to your location or search a region</span>
+			</button>
+		{/if}
 
 		{#if viewChanged || selectedFeature}
 			<button
@@ -407,13 +418,20 @@ let orgHref = $derived(
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 						{@html photoFrameSvg}
 					</div>
-					<p class="around-prompt">
-						ReTreever's 'Around Me' function is most efficient with location
-						services enabled.
-					</p>
-					<button type="button" class="allow-btn" onclick={allowLocation}>
-						Allow
-					</button>
+					{#if userLocation}
+						<p class="around-prompt">Jump to the land around you.</p>
+						<button type="button" class="allow-btn" onclick={goToUser}>
+							Go to my location
+						</button>
+					{:else}
+						<p class="around-prompt">
+							ReTreever's 'Around Me' function is most efficient with location
+							services enabled.
+						</p>
+						<button type="button" class="allow-btn" onclick={allowLocation}>
+							Allow
+						</button>
+					{/if}
 					{#if aroundMeStatus}
 						<p class="around-status" role="status">{aroundMeStatus}</p>
 					{/if}
@@ -557,6 +575,9 @@ let orgHref = $derived(
 
 <style>
 	.where-stage {
+		--around-right: 3.2%;
+		--around-bottom: 12%;
+		--around-size: clamp(44px, 3.8vw, 64px);
 		container-type: size;
 		container-name: where-stage;
 		position: relative;
@@ -676,9 +697,9 @@ let orgHref = $derived(
 
 	.around-btn {
 		position: absolute;
-		right: 3.2%;
-		bottom: 12%;
-		width: clamp(44px, 3.8vw, 64px);
+		right: var(--around-right);
+		bottom: var(--around-bottom);
+		width: var(--around-size);
 		aspect-ratio: 1;
 		z-index: 20;
 		display: flex;
@@ -711,6 +732,93 @@ let orgHref = $derived(
 	.around-btn:hover .tool-tip,
 	.around-btn:focus-visible .tool-tip {
 		opacity: 1;
+	}
+
+	.around-btn.is-hinted .tool-tip {
+		display: none;
+	}
+
+	.around-btn.is-hinted::after {
+		content: "";
+		position: absolute;
+		inset: -2px;
+		border-radius: inherit;
+		border: 2px solid #fad702;
+		animation: around-ring 2.4s ease-out 1.2s 3 both;
+		pointer-events: none;
+	}
+
+	@keyframes around-ring {
+		0% {
+			transform: scale(1);
+			opacity: 0.9;
+		}
+		100% {
+			transform: scale(1.8);
+			opacity: 0;
+		}
+	}
+
+	.around-hint {
+		position: absolute;
+		right: calc(var(--around-right) + var(--around-size) + 14px);
+		bottom: var(--around-bottom);
+		min-height: var(--around-size);
+		z-index: 20;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: flex-start;
+		gap: 2px;
+		padding: 8px 12px;
+		border: 1px solid #fad702;
+		border-radius: 6px;
+		background: rgba(23, 29, 49, 0.95);
+		color: #fad702;
+		text-align: left;
+		cursor: pointer;
+		-webkit-tap-highlight-color: transparent;
+		animation: around-hint-in 0.5s ease-out 1.2s both;
+	}
+
+	.around-hint::after {
+		content: "";
+		position: absolute;
+		left: 100%;
+		top: 50%;
+		translate: 0 -50%;
+		border: 7px solid transparent;
+		border-left-color: #fad702;
+	}
+
+	.around-hint strong {
+		font-size: 0.8rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.around-hint span {
+		font-size: 0.72rem;
+		letter-spacing: 0.03em;
+		color: rgba(250, 215, 2, 0.8);
+		white-space: nowrap;
+	}
+
+	.around-hint:hover,
+	.around-hint:focus-visible {
+		background: rgba(250, 215, 2, 0.18);
+		box-shadow: 0 0 8px rgba(250, 215, 2, 0.55);
+	}
+
+	@keyframes around-hint-in {
+		from {
+			opacity: 0;
+			translate: 8px 0;
+		}
+		to {
+			opacity: 1;
+			translate: 0 0;
+		}
 	}
 
 	.tool-btn:hover img,
@@ -1160,10 +1268,15 @@ let orgHref = $derived(
 			height: 12.5%;
 		}
 
-		.around-btn {
-			right: 10px;
-			bottom: 14%;
-			width: 48px;
+		.where-stage {
+			--around-right: 10px;
+			--around-bottom: 14%;
+			--around-size: 48px;
+		}
+
+		.around-hint span {
+			white-space: normal;
+			max-width: 46vw;
 		}
 
 		.tool-tip {
