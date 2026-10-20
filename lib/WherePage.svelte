@@ -535,7 +535,7 @@ let orgHref = $derived(
 						<div class="marker-row">
 							<dt>Land:</dt>
 							<dd>
-								<a href={detailsHref}>{selectedFeature.landKey}</a>
+								<a href={detailsHref}>{selectedFeature.landName ?? "Unnamed land"}</a>
 							</dd>
 						</div>
 					{/if}
