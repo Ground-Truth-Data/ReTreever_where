@@ -11,6 +11,7 @@ import { defaultOptions } from "./MAP_CONFIG";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
 import { featureCoord } from "./coord";
+import type { Centroids } from "./whereTypes";
 
 let {
 	map = $bindable(null),
@@ -18,6 +19,7 @@ let {
 	viewChanged = $bindable(false),
 	markerSvg = undefined,
 	polygonsUrl,
+	centroids = undefined,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
 }: {
@@ -26,6 +28,8 @@ let {
 	viewChanged?: boolean;
 	markerSvg?: string;
 	polygonsUrl?: string;
+	/** The pins, already in flight when the host handed them over. */
+	centroids?: Promise<Centroids | null>;
 	userLocation?: [number, number] | null;
 	/** Must patch mapbox's prototypes before the first `new Map`. */
 	ensureMapboxGuards?: () => Promise<void>;
@@ -65,7 +69,6 @@ export function resetView() {
 
 	const url = new URL($page.url);
 	url.searchParams.delete("land");
-	url.searchParams.delete("projectName");
 	void goto(`${url.pathname}${url.search}`, {
 		replaceState: true,
 		noScroll: true,
@@ -196,8 +199,7 @@ onMount(() => {
 		if (disposed) return;
 
 		const landParam = $page.url.searchParams.get("land");
-		const projectNameParam = $page.url.searchParams.get("projectName");
-		const hasTarget = !!(landParam || projectNameParam);
+		const hasTarget = !!landParam;
 
 		fullMapOptions.autoRotate = !hasTarget;
 		fullMapOptions.showZoomReadout = true;
@@ -231,6 +233,7 @@ onMount(() => {
 			...(markerSvg && { markerSvg }),
 			loadMarkers: true,
 			polygonsUrl,
+			centroids,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;
@@ -249,27 +252,16 @@ onMount(() => {
 			},
 		});
 
-		if (hasTarget && polygonsUrl) {
+		// The pins carry no land keys; the server resolves the link to its polygon, names and all.
+		if (landParam && polygonsUrl) {
 			(async () => {
 				try {
 					const response = await fetch(
-						`${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}mode=centroids`,
+						`${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}land=${encodeURIComponent(landParam)}`,
 					);
 					if (!response.ok) return;
-					const data: { features?: any[] } = await response.json();
-					let targetFeature: any = null;
-					if (landParam) {
-						const match = data.features?.find(
-							(f: any) =>
-								f.properties?.landKey === landParam || f.id === landParam,
-						);
-						targetFeature = match?.properties ?? null;
-					} else if (projectNameParam) {
-						const match = data.features?.find(
-							(f: any) => f.properties?.projectName === projectNameParam,
-						);
-						targetFeature = match?.properties ?? null;
-					}
+					const data: { properties?: any } = await response.json();
+					const targetFeature: any = data.properties ?? null;
 					if (!targetFeature) return;
 					if (map) {
 						flyToAndSelect(map, targetFeature);

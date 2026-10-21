@@ -1,7 +1,7 @@
 <script lang="ts">
 import { page } from "$app/stores";
 import WherePage from "../../lib/WherePage.svelte";
-import type { FavouriteLocation, WhereRoutes } from "../../lib/whereTypes";
+import type { Centroids, FavouriteLocation, WhereRoutes } from "../../lib/whereTypes";
 import type { WhereView } from "../../params/whereView";
 import type { Feature } from "geojson";
 import type { Snippet } from "svelte";
@@ -13,6 +13,8 @@ type HostProps = {
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 	routes?: WhereRoutes;
 	ensureMapboxGuards?: () => Promise<void>;
+	polygonsUrl?: string;
+	centroids?: Promise<Centroids | null>;
 };
 
 // A layout, not a page: a view toggle would otherwise remount the globe.

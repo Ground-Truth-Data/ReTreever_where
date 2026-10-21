@@ -1,4 +1,5 @@
 import type * as mapboxgl from "mapbox-gl";
+import type { Centroids } from "./whereTypes";
 
 /** All features off by default; `fullMapOptions` and `compactGlobeOptions` are the presets. */
 export interface MapOptions {
@@ -34,8 +35,10 @@ export interface MapOptions {
     initialZoom?: number;
     initialCenter?: [number, number];
     markerSvg?: string;
-    /** Land GeoJSON endpoint; with `loadMarkers`, draws land pins and polygons. */
+    /** Land GeoJSON endpoint: `?bbox=` for polygons in view, `?id=` / `?land=` for one with its names. */
     polygonsUrl?: string;
+    /** The pins, started by the host before the map asks; with `loadMarkers`, drawn clustered. */
+    centroids?: Promise<Centroids | null>;
     loadMarkers?: boolean;
     style?: string;
     /** Lets a caller rewrite or block every tile/asset request. */
