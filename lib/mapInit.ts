@@ -438,9 +438,14 @@ export function initializeMap(
         else if (z < softMin) safeEase(map, { zoom: softMin, duration: easeMs });
     });
 
-    map.on("load", async () => {
+    // `style.load`, not `load`: a layer needs the style, and `load` also waits for every
+    // first tile, which on a slow link puts the pins seconds behind the globe.
+    if (opts.loadMarkers) {
+        map.once("style.load", () => void addMarkersLayer(map, opts));
+    }
+
+    map.on("load", () => {
         map.resize();
-        if (opts.loadMarkers) await addMarkersLayer(map, opts);
         if (opts.autoRotate) startRotation(map, opts, userInteractingRef);
         opts.onMapReady?.(map);
     });

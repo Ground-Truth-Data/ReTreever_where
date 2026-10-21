@@ -11,6 +11,7 @@ import { safeFitBounds } from "./safeMap";
 import { featureCoord } from "./coord";
 import {
 	formatTransparencyScore,
+	type Centroids,
 	type FavouriteLocation,
 	type WhereRoutes,
 } from "./whereTypes";
@@ -44,6 +45,7 @@ let {
 	routes = {},
 	ensureMapboxGuards = async () => {},
 	polygonsUrl,
+	centroids = undefined,
 	view = null,
 	basePath = "/where",
 }: {
@@ -53,6 +55,8 @@ let {
 	routes?: WhereRoutes;
 	ensureMapboxGuards?: () => Promise<void>;
 	polygonsUrl?: string;
+	/** The pins, started by the host at navigation so they land with the globe. */
+	centroids?: Promise<Centroids | null>;
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 	view?: WhereView | null;
 	basePath?: string;
@@ -278,6 +282,7 @@ let orgHref = $derived(
 		{userLocation}
 		{ensureMapboxGuards}
 		{polygonsUrl}
+		{centroids}
 	/>
 
 	<WhereDrawControls
@@ -519,6 +524,18 @@ let orgHref = $derived(
 						{selectedIsFavourite ? "★" : "☆"}
 					</button>
 				{/if}
+				{#if selectedFeature.loading || selectedFeature.failed}
+					<div class="marker-pending" aria-busy={selectedFeature.loading ? "true" : undefined}>
+						{#if selectedFeature.failed}
+							<p class="marker-failed">This land didn&rsquo;t load. Tap the pin again.</p>
+						{:else}
+							<span class="sk sk-title"></span>
+							<span class="sk sk-score"></span>
+							<span class="sk sk-row"></span>
+							<span class="sk sk-row sk-row-short"></span>
+						{/if}
+					</div>
+				{:else}
 				<h2 class="marker-title">
 					{selectedFeature.landName ?? selectedFeature.projectName ?? "This land"}&rsquo;s
 				</h2>
@@ -569,6 +586,7 @@ let orgHref = $derived(
 				<a class="marker-details-link" href={detailsHref}>
 					View score details and all data
 				</a>
+				{/if}
 			</aside>
 		{/if}
 </div>
@@ -1178,6 +1196,67 @@ let orgHref = $derived(
 	.fav-star:focus-visible,
 	.fav-star.fav-on {
 		color: #fad702;
+	}
+
+	.marker-pending {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		margin: 0 8% 8% 4%;
+		min-height: 7.5rem;
+	}
+
+	.sk {
+		display: block;
+		height: 0.8em;
+		border-radius: 4px;
+		background: linear-gradient(
+			90deg,
+			rgba(139, 151, 201, 0.16) 0%,
+			rgba(139, 151, 201, 0.4) 50%,
+			rgba(139, 151, 201, 0.16) 100%
+		);
+		background-size: 200% 100%;
+		animation: skShimmer 1.1s linear infinite;
+	}
+
+	.sk-title {
+		width: 68%;
+		height: 1.15em;
+		font-size: clamp(0.95rem, 1.25vw, 1.2rem);
+	}
+
+	.sk-score {
+		width: 42%;
+		height: 1.6em;
+		font-size: clamp(1.1rem, 1.6vw, 1.5rem);
+		margin-top: 0.2rem;
+	}
+
+	.sk-row {
+		width: 86%;
+		font-size: clamp(0.72rem, 0.9vw, 0.85rem);
+	}
+
+	.sk-row-short {
+		width: 58%;
+	}
+
+	.marker-failed {
+		margin: 0.4rem 0 0;
+		color: #cfd6ee;
+		font-size: clamp(0.78rem, 0.95vw, 0.9rem);
+		line-height: 1.4;
+	}
+
+	@keyframes skShimmer {
+		from {
+			background-position: 200% 0;
+		}
+		to {
+			background-position: -200% 0;
+		}
 	}
 
 	.marker-title {

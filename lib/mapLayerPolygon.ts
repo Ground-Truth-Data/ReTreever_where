@@ -8,10 +8,13 @@ import type {
 } from "geojson";
 import type * as mapboxgl from "mapbox-gl";
 import mapboxglRuntime from "mapbox-gl";
+import { pinsFromCentroids } from "./centroidPins";
+import { featureCoord } from "./coord";
 import { MAP_CONFIG } from "./MAP_CONFIG";
 import { addClusteredPins, isMapAlive } from "./mapMarker";
 import type { MapOptions } from "./mapTypes";
 import { safeEase } from "./safeEase";
+import type { Centroids } from "./whereTypes";
 
 const POLYGON_STYLE = {
     fillColor: "rgba(255, 215, 0, 0.25)",
@@ -37,6 +40,9 @@ const VIEW_PAD = 0.15;
 // Mirrors the API's thresholds, for the popup only.
 const LARGE_POLYGON_HA = 1_000;
 const ABSOLUTE_CAP_HA = 50_000;
+
+/** `performance.getEntriesByName("where-pins")` reads when the first pins were handed to the map. */
+const PINS_MARK = "where-pins";
 
 function emptyFC(): FeatureCollection {
     return { type: "FeatureCollection", features: [] };
@@ -110,8 +116,8 @@ function addPolygonLayers(
 }
 
 /**
- * Land as clustered centroid pins, plus full polygon geometry fetched once the
- * camera nears `POLYGON_STYLE.minZoom` — the globe loads on Points alone.
+ * Land as clustered pins from the host's centroids arrays, plus full polygon geometry fetched
+ * once the camera nears `POLYGON_STYLE.minZoom`. A pin carries no names: a click asks `?id=`.
  */
 export async function addMarkersLayer(
     map: mapboxgl.Map,
@@ -122,32 +128,14 @@ export async function addMarkersLayer(
     const withQuery = (q: string) =>
         `${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}${q}`;
 
-    let centroidsData: { features?: Feature<Point, GeoJsonProperties>[] } | null;
+    let centroids: Centroids | null = null;
     try {
-        const response = await fetch(withQuery("mode=centroids"));
-        if (!isMapAlive(map)) return;
-        if (!response.ok) {
-            console.error("Failed to fetch polygon centroids:", response.status);
-            return;
-        }
-        centroidsData = await response.json();
-        if (!isMapAlive(map)) return;
+        centroids = (await options.centroids) ?? null;
     } catch (err) {
-        console.error("Error fetching polygon centroids:", err);
-        return;
+        console.error("Error loading land pins:", err);
     }
-
-    const centroidFeatures = (centroidsData?.features ?? []).filter((f) => {
-        const c = f.geometry?.coordinates;
-        return (
-            Array.isArray(c) &&
-            c.length === 2 &&
-            Number.isFinite(c[0]) &&
-            Number.isFinite(c[1]) &&
-            Math.abs(c[0]) >= 1 &&
-            Math.abs(c[1]) >= 1
-        );
-    });
+    if (!isMapAlive(map)) return;
+    const pins = pinsFromCentroids(centroids);
 
     const loadedCells = new Set<string>();
     const polygonFeatures = new Map<string | number, Feature>();
@@ -155,24 +143,61 @@ export async function addMarkersLayer(
     let inflight: { controller: AbortController; box: CellBox } | null = null;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+    const previewSource = () =>
+        map.getSource(PREVIEW_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+
+    /**
+     * The drawer opens on the pin at once and fills from `?id=` — the one query a visitor waits
+     * for. A large polygon's geometry comes in the same answer and draws as the preview.
+     */
+    async function selectPolygon(polygonId: string, center: [number, number]): Promise<void> {
+        if (options.compact) return;
+        safeEase(map, { center, zoom: MAP_CONFIG.cluster.clickZoom });
+        const centroid = { type: "Point", coordinates: center };
+        options.onFeatureSelect?.({ polygonId, centroid, loading: true });
+        try {
+            const response = await fetch(withQuery(`id=${encodeURIComponent(polygonId)}`));
+            if (!isMapAlive(map)) return;
+            if (!response.ok) {
+                console.error("Failed to fetch polygon:", response.status);
+                options.onFeatureSelect?.({ polygonId, centroid, failed: true });
+                return;
+            }
+            const feature = (await response.json()) as Feature<
+                Polygon | MultiPolygon | null,
+                GeoJsonProperties
+            >;
+            if (!isMapAlive(map)) return;
+            const properties = feature.properties ?? {};
+            const hectares = (properties.hectaresCalc as number | null) ?? null;
+            if (properties.isAbsoluteTooLarge) {
+                showLargePolygonPopup(map, center, hectares, true);
+            } else if (properties.isLargePolygon && feature.geometry) {
+                previewSource()?.setData({
+                    type: "FeatureCollection",
+                    features: [feature as Feature<Polygon | MultiPolygon>],
+                });
+            }
+            options.onFeatureSelect?.(properties);
+        } catch (err) {
+            console.error("Failed to fetch polygon:", err);
+            if (isMapAlive(map)) options.onFeatureSelect?.({ polygonId, centroid, failed: true });
+        }
+    }
+
     function bindPolygonClicks(): void {
         if (options.compact) return;
         map.on("click", "polygons-fill", (e) => {
+            // A pin sits inside its own fill; its handler owns that click, or `?id=` is asked twice.
+            const pinLayers = [`${PINS_ID}-dogs`, `${PINS_ID}-clusters`].filter((id) => map.getLayer(id));
+            if (pinLayers.length && map.queryRenderedFeatures(e.point, { layers: pinLayers }).length) return;
             const properties = map.queryRenderedFeatures(e.point, {
                 layers: ["polygons-fill"],
             })[0]?.properties;
-            if (!properties) return;
-
-            const centroid = properties.centroid as
-                | { coordinates?: [number, number] }
-                | undefined;
-            const center =
-                centroid && typeof centroid === "object" && centroid.coordinates
-                    ? centroid.coordinates
-                    : (e.lngLat.toArray() as [number, number]);
-
-            safeEase(map, { center, zoom: MAP_CONFIG.cluster.clickZoom });
-            options.onFeatureSelect?.(properties);
+            const polygonId = properties?.polygonId as string | undefined;
+            if (!polygonId) return;
+            const center = featureCoord(properties) ?? (e.lngLat.toArray() as [number, number]);
+            void selectPolygon(polygonId, [center[0], center[1]]);
         });
         map.on("mouseenter", "polygons-fill", () => {
             map.getCanvas().style.cursor = "pointer";
@@ -301,59 +326,18 @@ export async function addMarkersLayer(
 
     addClusteredPins(map, {
         id: PINS_ID,
-        data: { type: "FeatureCollection", features: centroidFeatures },
+        data: pins,
         markerSvg: options.markerSvg,
-        onPointClick: async (feature) => {
-            if (options.compact) return;
-            const coordinates = (
-                feature.geometry as Point
-            ).coordinates.slice() as [number, number];
-            const properties = feature.properties;
-            if (!properties) return;
-
-            safeEase(map, {
-                center: coordinates,
-                zoom: MAP_CONFIG.cluster.clickZoom,
-            });
-
-            const polygonId = properties.polygonId as string | undefined;
-            const hectares = (properties.hectaresCalc as number | null) ?? null;
-
-            if (properties.isAbsoluteTooLarge) {
-                showLargePolygonPopup(map, coordinates, hectares, true);
-            } else if (properties.isLargePolygon && polygonId) {
-                try {
-                    const response = await fetch(
-                        withQuery(`id=${encodeURIComponent(polygonId)}`),
-                    );
-                    if (!isMapAlive(map)) return;
-                    if (response.ok) {
-                        const featureData = (await response.json()) as Feature<
-                            Polygon | MultiPolygon,
-                            GeoJsonProperties
-                        >;
-                        if (!isMapAlive(map)) return;
-                        if (featureData.geometry) {
-                            (
-                                map.getSource(PREVIEW_SOURCE_ID) as
-                                    | mapboxgl.GeoJSONSource
-                                    | undefined
-                            )?.setData({
-                                type: "FeatureCollection",
-                                features: [featureData],
-                            });
-                        }
-                    } else if (response.status === 413) {
-                        showLargePolygonPopup(map, coordinates, hectares, true);
-                    }
-                } catch (err) {
-                    console.error("Failed to fetch large polygon:", err);
-                }
-            }
-
-            options.onFeatureSelect?.(properties);
+        onPointClick: (feature) => {
+            const polygonId = feature.properties?.polygonId as string | undefined;
+            if (!polygonId) return;
+            const coordinates = (feature.geometry as Point).coordinates.slice() as [number, number];
+            void selectPolygon(polygonId, coordinates);
         },
     });
+    if (typeof performance !== "undefined" && !performance.getEntriesByName(PINS_MARK).length) {
+        performance.mark(PINS_MARK, { detail: { pins: pins.features.length } });
+    }
 
     if (!map.getSource(PREVIEW_SOURCE_ID)) {
         map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data: emptyFC() });
@@ -376,11 +360,7 @@ export async function addMarkersLayer(
                     .length > 0
             )
                 return;
-            (
-                map.getSource(PREVIEW_SOURCE_ID) as
-                    | mapboxgl.GeoJSONSource
-                    | undefined
-            )?.setData(emptyFC());
+            previewSource()?.setData(emptyFC());
         });
     }
 }
