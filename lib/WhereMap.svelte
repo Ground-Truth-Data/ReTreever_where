@@ -242,6 +242,8 @@ onMount(() => {
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;
+				// Dev only: a browser gate can reach the map (queryRenderedFeatures); nothing else exposes it.
+				if (import.meta.env.DEV) Object.assign(window, { __whereMap: m });
 				m.once("idle", () => {
 					splashVisible = false;
 				});
