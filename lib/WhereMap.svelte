@@ -10,8 +10,8 @@ import {
 import { defaultOptions } from "./MAP_CONFIG";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
-import { featureCoord } from "./coord";
-import type { Centroids } from "./whereTypes";
+import { featureCoord, toCoord } from "./coord";
+import type { CentroidIds, Centroids } from "./whereTypes";
 
 let {
 	map = $bindable(null),
@@ -50,7 +50,8 @@ const SPIN_MAX_ZOOM = 4;
 
 function flyToAndSelect(m: import("mapbox-gl").Map, feature: any) {
 	selectedFeature = feature;
-	const coords = featureCoord(feature);
+	// A polygon with no centroid still has its land's point, as the pins route does.
+	const coords = featureCoord(feature) ?? toCoord(feature?.longitude, feature?.latitude);
 	if (coords) safeEase(m, { center: coords, zoom: 14, duration: 1200 });
 }
 
