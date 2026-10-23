@@ -10,8 +10,8 @@ import {
 import { defaultOptions } from "./MAP_CONFIG";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
-import { featureCoord } from "./coord";
-import type { Centroids } from "./whereTypes";
+import { featureCoord, toCoord } from "./coord";
+import type { CentroidIds, Centroids } from "./whereTypes";
 
 let {
 	map = $bindable(null),
@@ -20,6 +20,7 @@ let {
 	markerSvg = undefined,
 	polygonsUrl,
 	centroids = undefined,
+	centroidIds = undefined,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
 }: {
@@ -30,6 +31,8 @@ let {
 	polygonsUrl?: string;
 	/** The pins, already in flight when the host handed them over. */
 	centroids?: Promise<Centroids | null>;
+	/** Their polygon keys, read on the first pin click. */
+	centroidIds?: Promise<CentroidIds | null>;
 	userLocation?: [number, number] | null;
 	/** Must patch mapbox's prototypes before the first `new Map`. */
 	ensureMapboxGuards?: () => Promise<void>;
@@ -50,7 +53,8 @@ const SPIN_MAX_ZOOM = 4;
 
 function flyToAndSelect(m: import("mapbox-gl").Map, feature: any) {
 	selectedFeature = feature;
-	const coords = featureCoord(feature);
+	// A polygon with no centroid still has its land's point, as the pins route does.
+	const coords = featureCoord(feature) ?? toCoord(feature?.longitude, feature?.latitude);
 	if (coords) safeEase(m, { center: coords, zoom: 14, duration: 1200 });
 }
 
@@ -234,6 +238,7 @@ onMount(() => {
 			loadMarkers: true,
 			polygonsUrl,
 			centroids,
+			centroidIds,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;

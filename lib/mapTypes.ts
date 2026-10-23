@@ -1,5 +1,5 @@
 import type * as mapboxgl from "mapbox-gl";
-import type { Centroids } from "./whereTypes";
+import type { CentroidIds, Centroids } from "./whereTypes";
 
 /** All features off by default; `fullMapOptions` and `compactGlobeOptions` are the presets. */
 export interface MapOptions {
@@ -39,6 +39,8 @@ export interface MapOptions {
     polygonsUrl?: string;
     /** The pins, started by the host before the map asks; with `loadMarkers`, drawn clustered. */
     centroids?: Promise<Centroids | null>;
+    /** The pins' polygon keys, in flight beside `centroids`; awaited on the first pin click, never before. */
+    centroidIds?: Promise<CentroidIds | null>;
     loadMarkers?: boolean;
     style?: string;
     /** Lets a caller rewrite or block every tile/asset request. */

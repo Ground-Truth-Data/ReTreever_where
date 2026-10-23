@@ -11,6 +11,7 @@ import { safeFitBounds } from "./safeMap";
 import { featureCoord } from "./coord";
 import {
 	formatTransparencyScore,
+	type CentroidIds,
 	type Centroids,
 	type FavouriteLocation,
 	type WhereRoutes,
@@ -46,6 +47,7 @@ let {
 	ensureMapboxGuards = async () => {},
 	polygonsUrl,
 	centroids = undefined,
+	centroidIds = undefined,
 	view = null,
 	basePath = "/where",
 }: {
@@ -57,6 +59,8 @@ let {
 	polygonsUrl?: string;
 	/** The pins, started by the host at navigation so they land with the globe. */
 	centroids?: Promise<Centroids | null>;
+	/** Their polygon keys, read on the first pin click. */
+	centroidIds?: Promise<CentroidIds | null>;
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 	view?: WhereView | null;
 	basePath?: string;
@@ -283,6 +287,7 @@ let orgHref = $derived(
 		{ensureMapboxGuards}
 		{polygonsUrl}
 		{centroids}
+		{centroidIds}
 	/>
 
 	<WhereDrawControls

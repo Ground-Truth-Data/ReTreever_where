@@ -14,7 +14,7 @@ import { MAP_CONFIG } from "./MAP_CONFIG";
 import { addClusteredPins, isMapAlive } from "./mapMarker";
 import type { MapOptions } from "./mapTypes";
 import { safeEase } from "./safeEase";
-import type { Centroids } from "./whereTypes";
+import type { CentroidIds, Centroids } from "./whereTypes";
 
 const POLYGON_STYLE = {
     fillColor: "rgba(255, 215, 0, 0.25)",
@@ -117,7 +117,8 @@ function addPolygonLayers(
 
 /**
  * Land as clustered pins from the host's centroids arrays, plus full polygon geometry fetched
- * once the camera nears `POLYGON_STYLE.minZoom`. A pin carries no names: a click asks `?id=`.
+ * once the camera nears `POLYGON_STYLE.minZoom`. A pin carries only its number: a click looks its
+ * key up in the ids body and asks `?id=`.
  */
 export async function addMarkersLayer(
     map: mapboxgl.Map,
@@ -148,14 +149,25 @@ export async function addMarkersLayer(
 
     /**
      * The drawer opens on the pin at once and fills from `?id=` — the one query a visitor waits
-     * for. A large polygon's geometry comes in the same answer and draws as the preview.
+     * for. A large polygon's geometry comes in the same answer and draws as the preview. A pin
+     * hands its key over as a promise: the ids body is awaited here, on the first click, not before.
      */
-    async function selectPolygon(polygonId: string, center: [number, number]): Promise<void> {
+    async function selectPolygon(
+        key: string | Promise<string | undefined>,
+        center: [number, number],
+    ): Promise<void> {
         if (options.compact) return;
         safeEase(map, { center, zoom: MAP_CONFIG.cluster.clickZoom });
         const centroid = { type: "Point", coordinates: center };
-        options.onFeatureSelect?.({ polygonId, centroid, loading: true });
+        options.onFeatureSelect?.({ centroid, loading: true });
+        let polygonId: string | undefined;
         try {
+            polygonId = await key;
+            if (!isMapAlive(map)) return;
+            if (!polygonId) {
+                options.onFeatureSelect?.({ centroid, failed: true });
+                return;
+            }
             const response = await fetch(withQuery(`id=${encodeURIComponent(polygonId)}`));
             if (!isMapAlive(map)) return;
             if (!response.ok) {
@@ -324,15 +336,25 @@ export async function addMarkersLayer(
     map.on("moveend", maybeLoadView);
     maybeLoadView();
 
+    /** Ids from another build would name the wrong polygon: refused, with the alarm, never guessed. */
+    async function keyOfPin(pin: number): Promise<string | undefined> {
+        const ids: CentroidIds | null = (await options.centroidIds) ?? null;
+        if (!ids || !centroids || ids.build !== centroids.build) {
+            console.error("Pin ids missing or from another build:", ids?.build, centroids?.build);
+            return undefined;
+        }
+        return ids.ids[pin];
+    }
+
     addClusteredPins(map, {
         id: PINS_ID,
         data: pins,
         markerSvg: options.markerSvg,
         onPointClick: (feature) => {
-            const polygonId = feature.properties?.polygonId as string | undefined;
-            if (!polygonId) return;
+            const pin = feature.properties?.pin as number | undefined;
+            if (pin === undefined) return;
             const coordinates = (feature.geometry as Point).coordinates.slice() as [number, number];
-            void selectPolygon(polygonId, coordinates);
+            void selectPolygon(keyOfPin(pin), coordinates);
         },
     });
     if (typeof performance !== "undefined" && !performance.getEntriesByName(PINS_MARK).length) {
