@@ -20,6 +20,7 @@ let {
 	markerSvg = undefined,
 	polygonsUrl,
 	centroids = undefined,
+	centroidIds = undefined,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
 }: {
@@ -30,6 +31,8 @@ let {
 	polygonsUrl?: string;
 	/** The pins, already in flight when the host handed them over. */
 	centroids?: Promise<Centroids | null>;
+	/** Their polygon keys, read on the first pin click. */
+	centroidIds?: Promise<CentroidIds | null>;
 	userLocation?: [number, number] | null;
 	/** Must patch mapbox's prototypes before the first `new Map`. */
 	ensureMapboxGuards?: () => Promise<void>;
@@ -235,6 +238,7 @@ onMount(() => {
 			loadMarkers: true,
 			polygonsUrl,
 			centroids,
+			centroidIds,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;

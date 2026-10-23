@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { pinsFromCentroids } from "./centroidPins";
 
 describe("pinsFromCentroids — the arrays become Points, nothing more", () => {
-    it("pairs each id with its lon/lat and reads the size flag", () => {
+    it("numbers each pin, pairs it with its lon/lat and reads the size flag", () => {
         const fc = pinsFromCentroids({
-            ids: ["a", "b", "c"],
+            build: "b1",
             lonlat: [10, 20, 30.5, -40.25, 50, 60],
             large: [0, 1, 2],
         });
@@ -15,20 +15,20 @@ describe("pinsFromCentroids — the arrays become Points, nothing more", () => {
             [50, 60],
         ]);
         expect(fc.features.map((f) => f.properties)).toEqual([
-            { polygonId: "a", isLargePolygon: false, isAbsoluteTooLarge: false },
-            { polygonId: "b", isLargePolygon: true, isAbsoluteTooLarge: false },
-            { polygonId: "c", isLargePolygon: true, isAbsoluteTooLarge: true },
+            { pin: 0, isLargePolygon: false, isAbsoluteTooLarge: false },
+            { pin: 1, isLargePolygon: true, isAbsoluteTooLarge: false },
+            { pin: 2, isLargePolygon: true, isAbsoluteTooLarge: true },
         ]);
     });
 
-    it("stops at the shortest array and drops a non-finite coordinate", () => {
+    it("stops at the shortest array, drops a non-finite coordinate and keeps the dropped pin's number free", () => {
         const fc = pinsFromCentroids({
-            ids: ["a", "b", "c"],
+            build: "b1",
             lonlat: [10, 20, Number.NaN, 5, 1, 2, 3, 4],
-            large: [0, 0],
+            large: [0, 0, 0],
         });
 
-        expect(fc.features.map((f) => f.properties.polygonId)).toEqual(["a"]);
+        expect(fc.features.map((f) => f.properties.pin)).toEqual([0, 2]);
     });
 
     it("no artifact, no pins", () => {
