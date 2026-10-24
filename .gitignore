@@ -21,5 +21,5 @@ secrets/
 
 # standaloneTest.sh vendors siblings in here to prove this child runs
 # with no workspace around it, then leaves the copy behind. Generated, never
-# committed — unlike _rapper/, which IS tracked so a lone clone can run.
+# committed.
 _siblings/
