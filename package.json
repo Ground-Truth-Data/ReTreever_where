@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Where page. A CHILD — depends on getCache_OnlineMap beside it.",
+	"description": "Where page. A CHILD of ReTreever.",
 	"exports": {
 		"./lib/*": "./lib/*",
 		"./routes/*": "./routes/*",
