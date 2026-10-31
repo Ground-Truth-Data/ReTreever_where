@@ -439,9 +439,14 @@ export function initializeMap(
     });
 
     // `style.load`, not `load`: a layer needs the style, and `load` also waits for every
-    // first tile, which on a slow link puts the pins seconds behind the globe.
+    // first tile, which on a slow link puts the pins seconds behind the globe. One painted
+    // frame first, so the globe's first frame does not also build and clone every pin.
     if (opts.loadMarkers) {
-        map.once("style.load", () => void addMarkersLayer(map, opts));
+        map.once("style.load", () => {
+            map.once("render", () => {
+                setTimeout(() => void addMarkersLayer(map, opts), 0);
+            });
+        });
     }
 
     map.on("load", () => {

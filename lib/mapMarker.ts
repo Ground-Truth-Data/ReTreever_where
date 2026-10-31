@@ -114,6 +114,50 @@ function drawToImageData(img: HTMLImageElement, sizePx: number): ImageData {
     return ctx.getImageData(0, 0, sizePx, sizePx);
 }
 
+// A bake step yields after this long, so it never holds a phone's main thread for a frame.
+const SLICE_MS = 40;
+
+const nextTask = () => new Promise<void>((ok) => setTimeout(ok, 0));
+
+async function drawPoses(poses: string[], sizePx: number): Promise<ImageData[]> {
+    const urls = poses.map((p) =>
+        URL.createObjectURL(new Blob([p], { type: "image/svg+xml" })),
+    );
+    try {
+        const imgs = urls.map((u) => {
+            const img = new Image(sizePx, sizePx);
+            img.src = u;
+            return img;
+        });
+        await Promise.all(
+            imgs.map((img, i) =>
+                img.decode().catch(() => {
+                    throw new Error(`Frame ${i} failed to decode`);
+                }),
+            ),
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = sizePx;
+        canvas.height = sizePx;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) throw new Error("2d context unavailable");
+        const frames: ImageData[] = [];
+        let slice = performance.now();
+        for (const img of imgs) {
+            ctx.clearRect(0, 0, sizePx, sizePx);
+            ctx.drawImage(img, 0, 0, sizePx, sizePx);
+            frames.push(ctx.getImageData(0, 0, sizePx, sizePx));
+            if (performance.now() - slice > SLICE_MS) {
+                await nextTask();
+                slice = performance.now();
+            }
+        }
+        return frames;
+    } finally {
+        for (const u of urls) URL.revokeObjectURL(u);
+    }
+}
+
 function parseSmilDur(raw: string | null): number | null {
     if (!raw) return null;
     const t = raw.trim();
@@ -214,7 +258,8 @@ async function rasterizeSvgFrames(
         const frameCount = Math.max(2, loopFrameCount(svg, WAG_FPS));
         const durationS = (frameCount * frameMs) / 1000;
 
-        const frames: ImageData[] = [];
+        const poses: string[] = [];
+        let slice = performance.now();
         for (let i = 0; i < frameCount; i++) {
             svg.setCurrentTime?.((i / frameCount) * durationS);
 
@@ -237,25 +282,13 @@ async function rasterizeSvgFrames(
             )) {
                 n.remove();
             }
-
-            const blobUrl = URL.createObjectURL(
-                new Blob([new XMLSerializer().serializeToString(clone)], {
-                    type: "image/svg+xml",
-                }),
-            );
-            try {
-                const img = new Image(sizePx, sizePx);
-                await new Promise<void>((resolve, reject) => {
-                    img.onload = () => resolve();
-                    img.onerror = () =>
-                        reject(new Error(`Frame ${i} failed to decode`));
-                    img.src = blobUrl;
-                });
-                frames.push(drawToImageData(img, sizePx));
-            } finally {
-                URL.revokeObjectURL(blobUrl);
+            poses.push(new XMLSerializer().serializeToString(clone));
+            if (performance.now() - slice > SLICE_MS) {
+                await nextTask();
+                slice = performance.now();
             }
         }
+        const frames = await drawPoses(poses, sizePx);
         return { frames, frameMs };
     } finally {
         host.remove();
@@ -307,6 +340,42 @@ function startIconAnimation(
     mapRecord[timerKey] = true;
 }
 
+// Baking the wag's 96 frames is half a second of main thread; it waits for the globe's first
+// tiles and an idle moment. The timer covers pins added after `load` already fired.
+const SETTLE_CAP_MS = 4000;
+
+function whenMapSettled(map: mapboxgl.Map, run: () => void): void {
+    let done = false;
+    const go = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(cap);
+        map.off("load", go);
+        if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 2000 });
+        else setTimeout(run, 200);
+    };
+    const cap = setTimeout(go, SETTLE_CAP_MS);
+    map.once("load", go);
+}
+
+async function wagWhenBaked(
+    map: mapboxgl.Map,
+    iconId: string,
+    markerSvg: string,
+    sizePx: number,
+): Promise<void> {
+    if (!isMapAlive(map)) return;
+    let baked: { frames: ImageData[]; frameMs: number };
+    try {
+        baked = await rasterizeSvgFrames(markerSvg, sizePx);
+    } catch (err) {
+        console.warn("[map] animated marker bake failed, using a static icon:", err);
+        return;
+    }
+    if (!isMapAlive(map) || baked.frames.length < 2) return;
+    startIconAnimation(map, iconId, baked.frames, baked.frameMs);
+}
+
 async function addDogLayer(
     map: mapboxgl.Map,
     sourceId: string,
@@ -319,23 +388,11 @@ async function addDogLayer(
 
     if (!map.hasImage(iconId)) {
         const sizePx = MAP_CONFIG.marker.iconPixelSize;
-        let frames: ImageData[];
-        let frameMs = WAG_FALLBACK_DURATION_MS;
-        try {
-            ({ frames, frameMs } = await rasterizeSvgFrames(markerSvg, sizePx));
-        } catch (err) {
-            console.warn(
-                "[map] animated marker bake failed, using a static icon:",
-                err,
-            );
-            frames = [await rasterizeSvg(markerSvg, sizePx)];
-        }
+        const still = await rasterizeSvg(markerSvg, sizePx);
         if (!isMapAlive(map)) return;
         if (!map.hasImage(iconId)) {
-            map.addImage(iconId, frames[0], { pixelRatio: 2 });
-            if (frames.length > 1) {
-                startIconAnimation(map, iconId, frames, frameMs);
-            }
+            map.addImage(iconId, still, { pixelRatio: 2 });
+            whenMapSettled(map, () => void wagWhenBaked(map, iconId, markerSvg, sizePx));
         }
     }
 
