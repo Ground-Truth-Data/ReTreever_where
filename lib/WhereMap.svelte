@@ -223,6 +223,7 @@ onMount(() => {
 			}
 		};
 
+		const ids = centroidIds;
 		mapCleanup = initializeMap(mapContainer, {
 			...fullMapOptions,
 			showNavigation: false,
@@ -238,7 +239,7 @@ onMount(() => {
 			loadMarkers: true,
 			polygonsUrl,
 			centroids,
-			centroidIds,
+			centroidIds: ids,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;
@@ -247,6 +248,10 @@ onMount(() => {
 				m.once("idle", () => {
 					splashVisible = false;
 				});
+				// A host may hold the keys back until read; read them now the globe is up, before the first click.
+				const readIds = () => void ids?.then(() => {});
+				if ("requestIdleCallback" in window) requestIdleCallback(readIds, { timeout: 3000 });
+				else setTimeout(readIds, 500);
 				setTimeout(() => {
 					splashVisible = false;
 				}, 3000);
