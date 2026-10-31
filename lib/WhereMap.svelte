@@ -426,6 +426,35 @@ onMount(() => {
 		inset: 0;
 	}
 
+	/* Thumb-sized hit areas on the credits; the line itself stays small, as Mapbox draws it. */
+	@media (max-width: 767px) {
+		.where-mapbox :global(.mapboxgl-ctrl-attrib a),
+		.where-mapbox :global(.mapboxgl-ctrl-logo) {
+			position: relative;
+		}
+
+		/* Mapbox clips the wordmark's box, which would clip its hit area too; the link holds no text. */
+		.where-mapbox :global(.mapboxgl-ctrl-logo) {
+			overflow: visible;
+		}
+
+		.where-mapbox :global(.mapboxgl-ctrl-attrib a::before),
+		.where-mapbox :global(.mapboxgl-ctrl-logo::before) {
+			content: "";
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			width: max(100%, 44px);
+			height: max(100%, 44px);
+			transform: translate(-50%, -50%);
+		}
+
+		/* Room below the wordmark for its hit area inside the stage. */
+		.where-mapbox :global(.mapboxgl-ctrl-bottom-right) {
+			padding-bottom: 16px;
+		}
+	}
+
 	.map-splash {
 		position: absolute;
 		inset: 0;

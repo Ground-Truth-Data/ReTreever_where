@@ -1345,11 +1345,12 @@ let orgHref = $derived(
 			height: 46%;
 		}
 
+		/* Two thumb-sized buttons: the panel art stretches to fit them. */
 		.zoom-panel {
 			right: 4px;
 			top: 12%;
-			width: 38px;
-			height: 12.5%;
+			width: 44px;
+			height: 88px;
 		}
 
 		.where-stage {
