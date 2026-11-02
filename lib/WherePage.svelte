@@ -9,6 +9,8 @@ import type { WhereView } from "../params/whereView";
 import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
 import { featureCoord } from "./coord";
+import { m } from "$parent/src/lib/paraglide/messages";
+import { getLocale, localizeHref } from "$parent/src/lib/paraglide/runtime";
 import {
 	formatTransparencyScore,
 	type CentroidIds,
@@ -121,7 +123,7 @@ function pickDrawTool(mode: "polygon") {
 
 function viewHref(target: WhereView): string {
 	const path = view === target ? basePath : `${basePath}/${target}`;
-	return `${path}${$page.url.search}${$page.url.hash}`;
+	return `${localizeHref(path)}${$page.url.search}${$page.url.hash}`;
 }
 
 function zoomBy(delta: number) {
@@ -175,10 +177,10 @@ function resetView() {
 
 function allowLocation() {
 	if (!navigator.geolocation) {
-		aroundMeStatus = "Location isn't available in this browser.";
+		aroundMeStatus = m.wh_location_unavailable();
 		return;
 	}
-	aroundMeStatus = "Locating…";
+	aroundMeStatus = m.wh_locating();
 	navigator.geolocation.getCurrentPosition(
 		(pos) => {
 			userLocation = [pos.coords.longitude, pos.coords.latitude];
@@ -187,7 +189,7 @@ function allowLocation() {
 			aroundMeStatus = "";
 		},
 		() => {
-			aroundMeStatus = "Location was denied — search by area instead.";
+			aroundMeStatus = m.wh_location_denied();
 		},
 		{ enableHighAccuracy: false, timeout: 10000 },
 	);
@@ -197,7 +199,7 @@ async function searchArea(event: SubmitEvent) {
 	event.preventDefault();
 	const q = areaQuery.trim();
 	if (!map || !q) return;
-	aroundMeStatus = "Searching…";
+	aroundMeStatus = m.wh_searching();
 	try {
 		const token = import.meta.env.PUBLIC_GC_RT_mapbox_token;
 		// An interpolated `undefined` builds a 401 URL whose catch reads as a network blip.
@@ -216,7 +218,7 @@ async function searchArea(event: SubmitEvent) {
 		} = await res.json();
 		const hit = data?.features?.[0];
 		if (!hit) {
-			aroundMeStatus = "No matching area found.";
+			aroundMeStatus = m.wh_area_not_found();
 			return;
 		}
 		if (Array.isArray(hit.bbox) && hit.bbox.length === 4) {
@@ -232,7 +234,7 @@ async function searchArea(event: SubmitEvent) {
 		areaQuery = "";
 	} catch (err) {
 		console.error("Area search failed:", err);
-		aroundMeStatus = "Search failed — try again.";
+		aroundMeStatus = m.wh_area_search_failed();
 	}
 }
 
@@ -247,7 +249,7 @@ function toggleSelectedFavourite() {
 	if (!coords) return;
 	ontogglefavourite?.({
 		landKey: selectedFeature.landKey,
-		landName: selectedFeature.landName ?? "Unnamed land",
+		landName: selectedFeature.landName ?? m.wh_land_unnamed(),
 		lng: coords[0],
 		lat: coords[1],
 	});
@@ -260,18 +262,20 @@ function flyToFavourite(fav: FavouriteLocation) {
 }
 
 function formatHectares(hectares: number): string {
-	return Math.round(hectares).toLocaleString();
+	return Math.round(hectares).toLocaleString(getLocale());
 }
 
 let detailsHref = $derived(
 	selectedFeature?.projectKey && routes.whatProject
-		? routes.whatProject(selectedFeature.projectKey)
-		: (routes.what ?? null),
+		? localizeHref(routes.whatProject(selectedFeature.projectKey))
+		: routes.what
+			? localizeHref(routes.what)
+			: null,
 );
 
 let orgHref = $derived(
 	selectedFeature?.organizationWhoKey && routes.whoOrg
-		? routes.whoOrg(selectedFeature.organizationWhoKey)
+		? localizeHref(routes.whoOrg(selectedFeature.organizationWhoKey))
 		: null,
 );
 </script>
@@ -316,7 +320,7 @@ let orgHref = $derived(
 				data-sveltekit-noscroll
 			>
 				<img src={toolPeople} alt="" class="icon-people" />
-				<span class="tool-tip">Organizations</span>
+				<span class="tool-tip">{m.wh_view_orgs()}</span>
 			</a>
 			<a
 				class="tool-btn"
@@ -326,7 +330,7 @@ let orgHref = $derived(
 				data-sveltekit-noscroll
 			>
 				<img src={toolTree} alt="" class="icon-tree" />
-				<span class="tool-tip">Projects</span>
+				<span class="tool-tip">{m.wh_view_projects()}</span>
 			</a>
 			<button
 				type="button"
@@ -335,7 +339,7 @@ let orgHref = $derived(
 				onclick={toggleFavouritesPanel}
 			>
 				<img src={toolFavourites} alt="" />
-				<span class="tool-tip">Favourited locations</span>
+				<span class="tool-tip">{m.wh_favourites_label()}</span>
 			</button>
 			<button
 				type="button"
@@ -344,11 +348,11 @@ let orgHref = $derived(
 				onclick={() => pickDrawTool("polygon")}
 			>
 				<img src={toolPolygon} alt="" />
-				<span class="tool-tip">Draw a piece</span>
+				<span class="tool-tip">{m.wh_draw_piece()}</span>
 			</button>
 			<button type="button" class="tool-btn" onclick={cycleStyle}>
 				<img src={toolMap} alt="" class="icon-map" />
-				<span class="tool-tip">Basemap: {nextStyle.label}</span>
+				<span class="tool-tip">{m.wh_basemap_next({ style: nextStyle.label() })}</span>
 			</button>
 		</div>
 
@@ -360,20 +364,20 @@ let orgHref = $derived(
 			<button
 				type="button"
 				class="tool-btn"
-				aria-label="Zoom in"
+				aria-label={m.wh_zoom_in()}
 				onclick={() => zoomBy(1)}
 			>
 				<img src={toolPlus} alt="" class="icon-zoom" />
-				<span class="tool-tip tool-tip-left">Zoom in</span>
+				<span class="tool-tip tool-tip-left">{m.wh_zoom_in()}</span>
 			</button>
 			<button
 				type="button"
 				class="tool-btn"
-				aria-label="Zoom out"
+				aria-label={m.wh_zoom_out()}
 				onclick={() => zoomBy(-1)}
 			>
 				<img src={toolMinus} alt="" class="icon-zoom" />
-				<span class="tool-tip tool-tip-left">Zoom out</span>
+				<span class="tool-tip tool-tip-left">{m.wh_zoom_out()}</span>
 			</button>
 		</div>
 
@@ -382,17 +386,17 @@ let orgHref = $derived(
 			class="around-btn"
 			class:tool-active={aroundMeOpen}
 			class:is-hinted={aroundHintShown}
-			aria-label="Around Me"
+			aria-label={m.wh_around_me()}
 			onclick={toggleAroundMe}
 		>
 			<img src={toolAroundMe} alt="" />
-			<span class="tool-tip tool-tip-left">Around Me</span>
+			<span class="tool-tip tool-tip-left">{m.wh_around_me()}</span>
 		</button>
 
 		{#if aroundHintShown}
 			<button type="button" class="around-hint" onclick={toggleAroundMe}>
-				<strong>Around Me</strong>
-				<span>Jump to your location or search a region</span>
+				<strong>{m.wh_around_me()}</strong>
+				<span>{m.wh_around_me_hint()}</span>
 			</button>
 		{/if}
 
@@ -400,16 +404,16 @@ let orgHref = $derived(
 			<button
 				type="button"
 				class="reset-btn"
-				aria-label="Reset map view"
+				aria-label={m.wh_reset_view()}
 				onclick={resetView}
 			>
 				<span class="reset-glyph" aria-hidden="true">&#10226;</span>
-				<span class="tool-tip">Reset map view</span>
+				<span class="tool-tip">{m.wh_reset_view()}</span>
 			</button>
 		{/if}
 
 		{#if aroundMeOpen}
-			<div class="around-me" role="dialog" aria-label="Around Me">
+			<div class="around-me" role="dialog" aria-label={m.wh_around_me()}>
 				<div class="around-window">
 					<div class="around-window-bg" aria-hidden="true">
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -418,7 +422,7 @@ let orgHref = $derived(
 					<button
 						type="button"
 						class="popup-close"
-						aria-label="Close Around Me"
+						aria-label={m.wh_around_me_close()}
 						onclick={() => (aroundMeOpen = false)}
 					>
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -429,23 +433,22 @@ let orgHref = $derived(
 						{@html photoFrameSvg}
 					</div>
 					{#if userLocation}
-						<p class="around-prompt">Jump to the land around you.</p>
+						<p class="around-prompt">{m.wh_around_me_prompt_located()}</p>
 						<button type="button" class="allow-btn" onclick={goToUser}>
-							Go to my location
+							{m.wh_go_to_my_location()}
 						</button>
 					{:else}
 						<p class="around-prompt">
-							ReTreever's 'Around Me' function is most efficient with location
-							services enabled.
+							{m.wh_around_me_prompt_ask()}
 						</p>
 						<button type="button" class="allow-btn" onclick={allowLocation}>
-							Allow
+							{m.wh_allow_location()}
 						</button>
 					{/if}
 					{#if aroundMeStatus}
 						<p class="around-status" role="status">{aroundMeStatus}</p>
 					{/if}
-					<p class="around-secondary">Or narrow search by state/province:</p>
+					<p class="around-secondary">{m.wh_area_search_intro()}</p>
 				</div>
 
 				<form class="area-search" onsubmit={searchArea}>
@@ -456,10 +459,10 @@ let orgHref = $derived(
 					<input
 						type="text"
 						bind:value={areaQuery}
-						placeholder="State / province…"
-						aria-label="Search by state or province"
+						placeholder={m.wh_area_search_placeholder()}
+						aria-label={m.wh_area_search_label()}
 					/>
-					<button type="submit" class="area-go" aria-label="Search area">
+					<button type="submit" class="area-go" aria-label={m.wh_area_search_submit()}>
 						&#10142;
 					</button>
 				</form>
@@ -467,7 +470,7 @@ let orgHref = $derived(
 		{/if}
 
 		{#if favouritesOpen}
-			<aside class="favourites-panel" aria-label="Favourited locations">
+			<aside class="favourites-panel" aria-label={m.wh_favourites_label()}>
 				<div class="favourites-bg" aria-hidden="true">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html favouritesBoxRaw}
@@ -475,16 +478,16 @@ let orgHref = $derived(
 				<button
 					type="button"
 					class="popup-close"
-					aria-label="Close favourites"
+					aria-label={m.wh_favourites_close()}
 					onclick={() => (favouritesOpen = false)}
 				>
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html closeRaw}
 				</button>
-				<h2 class="favourites-title">Favourites</h2>
+				<h2 class="favourites-title">{m.wh_favourites_title()}</h2>
 				{#if favourites.length === 0}
 					<p class="favourites-empty">
-						No favourites yet — select a marker and tap its ★.
+						{m.wh_favourites_empty()}
 					</p>
 				{:else}
 					<ul class="favourites-list">
@@ -501,7 +504,7 @@ let orgHref = $derived(
 		{/if}
 
 		{#if selectedFeature}
-			<aside class="marker-box" aria-label="Selected location details">
+			<aside class="marker-box" aria-label={m.wh_selected_details_label()}>
 				<div class="marker-box-bg" aria-hidden="true">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html markerBoxRaw}
@@ -509,7 +512,7 @@ let orgHref = $derived(
 				<button
 					type="button"
 					class="popup-close marker-close"
-					aria-label="Close details"
+					aria-label={m.wh_details_close()}
 					onclick={() => (selectedFeature = null)}
 				>
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -521,8 +524,8 @@ let orgHref = $derived(
 						class="fav-star"
 						class:fav-on={selectedIsFavourite}
 						aria-label={selectedIsFavourite
-							? "Remove from favourites"
-							: "Add to favourites"}
+							? m.wh_favourite_remove()
+							: m.wh_favourite_add()}
 						aria-pressed={selectedIsFavourite}
 						onclick={toggleSelectedFavourite}
 					>
@@ -532,7 +535,7 @@ let orgHref = $derived(
 				{#if selectedFeature.loading || selectedFeature.failed}
 					<div class="marker-pending" aria-busy={selectedFeature.loading ? "true" : undefined}>
 						{#if selectedFeature.failed}
-							<p class="marker-failed">This land didn&rsquo;t load. Tap the pin again.</p>
+							<p class="marker-failed">{m.wh_land_load_failed()}</p>
 						{:else}
 							<span class="sk sk-title"></span>
 							<span class="sk sk-score"></span>
@@ -542,10 +545,10 @@ let orgHref = $derived(
 					</div>
 				{:else}
 				<h2 class="marker-title">
-					{selectedFeature.landName ?? selectedFeature.projectName ?? "This land"}&rsquo;s
+					{m.wh_marker_title({ name: selectedFeature.landName ?? selectedFeature.projectName ?? m.wh_land_this() })}
 				</h2>
 				<p class="marker-rating">
-					Transparency Rating:
+					{m.wh_transparency_rating_label()}
 					<span class="marker-score">
 						{selectedFeature.transparencyScore != null
 								? formatTransparencyScore(selectedFeature.transparencyScore)
@@ -555,27 +558,27 @@ let orgHref = $derived(
 				<dl class="marker-rows">
 					{#if selectedFeature.landKey}
 						<div class="marker-row">
-							<dt>Land:</dt>
+							<dt>{m.wh_row_land()}</dt>
 							<dd>
-								<a href={detailsHref}>{selectedFeature.landName ?? "Unnamed land"}</a>
+								<a href={detailsHref}>{selectedFeature.landName ?? m.wh_land_unnamed()}</a>
 							</dd>
 						</div>
 					{/if}
 					<div class="marker-row">
-						<dt>Organization:</dt>
+						<dt>{m.wh_row_organization()}</dt>
 						<dd>
 							{#if orgHref}
 								<a href={orgHref}>
 									{selectedFeature.organizationName ?? selectedFeature.organizationKey}
 								</a>
 							{:else}
-								{selectedFeature.organizationName ?? "None"}
+								{selectedFeature.organizationName ?? m.wh_org_none()}
 							{/if}
 						</dd>
 					</div>
 					{#if selectedFeature.projectName}
 						<div class="marker-row">
-							<dt>Project:</dt>
+							<dt>{m.wh_row_project()}</dt>
 							<dd>
 								<a href={detailsHref}>{selectedFeature.projectName}</a>
 							</dd>
@@ -583,13 +586,13 @@ let orgHref = $derived(
 					{/if}
 					{#if selectedFeature.hectaresCalc}
 						<div class="marker-row">
-							<dt>Hectares:</dt>
+							<dt>{m.wh_row_hectares()}</dt>
 							<dd>{formatHectares(Number(selectedFeature.hectaresCalc))}</dd>
 						</div>
 					{/if}
 				</dl>
 				<a class="marker-details-link" href={detailsHref}>
-					View score details and all data
+					{m.wh_details_link()}
 				</a>
 				{/if}
 			</aside>

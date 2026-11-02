@@ -1,4 +1,5 @@
 import type * as mapboxgl from "mapbox-gl";
+import { m } from "$parent/src/lib/paraglide/messages";
 
 const MAP_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffd700" style="width:60%;height:60%">
 	<path d="M15 3l6 3v15l-6-3-6 3-6-3V3l6 3 6-3zm-1 2.13l-4 2V19.1l4-2V5.13zm2 0v12l4 2V5.1l-4 2.03zM4 6.87v12l4-2V4.87l-4 2z"/>
@@ -6,7 +7,7 @@ const MAP_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fi
 
 interface StyleOption {
     id: string;
-    label: string;
+    label: () => string;
     styleUrl: string;
 }
 
@@ -33,8 +34,8 @@ class StyleToggleControl {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mapboxgl-ctrl-icon";
-        button.title = "Map Style";
-        button.setAttribute("aria-label", "Map Style");
+        button.title = m.wh_map_style();
+        button.setAttribute("aria-label", m.wh_map_style());
         button.style.cursor = "pointer";
         button.innerHTML = MAP_ICON;
 
@@ -62,7 +63,7 @@ class StyleToggleControl {
         this.styles.forEach((style) => {
             const item = document.createElement("div");
             item.dataset.styleId = style.id;
-            item.textContent = style.label;
+            item.textContent = style.label();
             // Our own container, never the window: in the desktop simulator the
             // map is a phone-width column inside a wide window.
             const containerWidth = this.container?.clientWidth || window.innerWidth;
@@ -148,17 +149,17 @@ class StyleToggleControl {
 export const defaultStyleOptions: StyleOption[] = [
     {
         id: "natural",
-        label: "Natural",
+        label: m.wh_basemap_natural,
         styleUrl: "mapbox://styles/mapbox/dark-v11",
     },
     {
         id: "streets",
-        label: "Streets",
+        label: m.wh_basemap_streets,
         styleUrl: "mapbox://styles/mapbox/streets-v12",
     },
     {
         id: "satellite",
-        label: "Satellite",
+        label: m.wh_basemap_satellite,
         styleUrl: "mapbox://styles/mapbox/satellite-streets-v12",
     },
 ];

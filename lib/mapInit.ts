@@ -1,5 +1,6 @@
 import mapboxgl from "mapbox-gl";
 import "./mapboxWorker";
+import { m } from "$parent/src/lib/paraglide/messages";
 import {
     compactGlobeOptions,
     defaultOptions,
@@ -174,6 +175,14 @@ export function initializeMap(
         pitch: 0,
         bearing: 0,
         preserveDrawingBuffer: MAP_PRESERVE_DRAWING_BUFFER,
+        locale: {
+            "Map.Title": m.wh_mapbox_map(),
+            "LogoControl.Title": m.wh_mapbox_logo(),
+            "AttributionControl.ToggleAttribution": m.wh_mapbox_toggle_attribution(),
+            "NavigationControl.ZoomIn": m.wh_zoom_in(),
+            "NavigationControl.ZoomOut": m.wh_zoom_out(),
+            "NavigationControl.ResetBearing": m.wh_mapbox_reset_bearing(),
+        },
     });
 
     installCoveringTilesGuard(map);

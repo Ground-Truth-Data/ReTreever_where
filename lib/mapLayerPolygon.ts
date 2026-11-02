@@ -8,6 +8,8 @@ import type {
 } from "geojson";
 import type * as mapboxgl from "mapbox-gl";
 import mapboxglRuntime from "mapbox-gl";
+import { m } from "$parent/src/lib/paraglide/messages";
+import { getLocale } from "$parent/src/lib/paraglide/runtime";
 import { pinsFromCentroids } from "./centroidPins";
 import { featureCoord } from "./coord";
 import { MAP_CONFIG } from "./MAP_CONFIG";
@@ -54,9 +56,11 @@ function showLargePolygonPopup(
     hectares: number | null,
     isAbsolute: boolean,
 ): void {
-    const limit = (isAbsolute ? ABSOLUTE_CAP_HA : LARGE_POLYGON_HA).toLocaleString();
+    const limit = (isAbsolute ? ABSOLUTE_CAP_HA : LARGE_POLYGON_HA).toLocaleString(getLocale());
     const ha =
-        hectares !== null ? Math.round(hectares).toLocaleString() : "unknown";
+        hectares !== null
+            ? Math.round(hectares).toLocaleString(getLocale())
+            : m.wh_large_polygon_hectares_unknown();
     const row = (label: string, value: string) =>
         `<div style="display:flex;justify-content:space-between;gap:1rem;font-size:0.8rem;">` +
         `<span style="color:#9ca3af;">${label}</span><span style="color:#e5e7eb;">${value}</span></div>`;
@@ -71,10 +75,10 @@ function showLargePolygonPopup(
         .setLngLat(lngLat)
         .setHTML(
             `<div style="background:#1a1a1a;border:1px solid #555;border-radius:0.5rem;padding:0.75rem 1rem;max-width:220px;box-shadow:-0.25rem 0 1rem rgba(0,0,0,0.3);">` +
-                row("Hectares:", ha) +
-                row("Limit:", `${limit} ha`) +
+                row(m.wh_row_hectares(), ha) +
+                row(m.wh_large_polygon_limit(), `${limit} ha`) +
                 `<p style="color:#d4d4d8;font-size:0.75rem;margin:0.5rem 0 0;line-height:1.3;border-top:1px solid #444;padding-top:0.4rem;">` +
-                `Polygon exceeds limit. Not meaningful restoration data.</p></div>`,
+                `${m.wh_large_polygon_note()}</p></div>`,
         )
         .addTo(map);
 }

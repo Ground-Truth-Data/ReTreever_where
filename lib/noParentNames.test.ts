@@ -8,11 +8,12 @@ const CHILD = fileURLToPath(new URL("..", import.meta.url));
 const EXT = new Set([".svelte", ".ts", ".js", ".css", ".json"]);
 
 // Tests are exempt: they never cross the build boundary a parent bundles.
+// messages/ is exempt too: it is reader-facing prose that must carry the brand name, and is never resolved as a path.
 const isTest = (name: string) => /\.test\.[^.]+$/.test(name);
 
 function sources(dir: string, out: string[] = []): string[] {
 	for (const e of readdirSync(dir, { withFileTypes: true })) {
-		if (e.name === "node_modules" || e.name === "assets") continue;
+		if (e.name === "node_modules" || e.name === "assets" || e.name === "messages") continue;
 		if (e.name.startsWith(".")) continue;
 		const full = join(dir, e.name);
 		if (e.isDirectory()) sources(full, out);
