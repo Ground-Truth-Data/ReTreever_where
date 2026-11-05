@@ -16,6 +16,7 @@ import {
 	type CentroidIds,
 	type Centroids,
 	type FavouriteLocation,
+	type PolygonTiles,
 	type WhereRoutes,
 } from "./whereTypes";
 
@@ -50,6 +51,7 @@ let {
 	polygonsUrl,
 	centroids = undefined,
 	centroidIds = undefined,
+	polygonTiles = undefined,
 	view = null,
 	basePath = "/where",
 }: {
@@ -63,6 +65,8 @@ let {
 	centroids?: Promise<Centroids | null>;
 	/** Their polygon keys, read on the first pin click. */
 	centroidIds?: Promise<CentroidIds | null>;
+	/** The fills as vector tiles, beside the pins; `null`, the map asks `?bbox=`. */
+	polygonTiles?: Promise<PolygonTiles | null>;
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
 	view?: WhereView | null;
 	basePath?: string;
@@ -292,6 +296,7 @@ let orgHref = $derived(
 		{polygonsUrl}
 		{centroids}
 		{centroidIds}
+		{polygonTiles}
 	/>
 
 	<WhereDrawControls

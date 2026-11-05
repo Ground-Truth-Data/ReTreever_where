@@ -16,7 +16,7 @@ import { MAP_CONFIG } from "./MAP_CONFIG";
 import { addClusteredPins, isMapAlive } from "./mapMarker";
 import type { MapOptions } from "./mapTypes";
 import { safeEase } from "./safeEase";
-import type { CentroidIds, Centroids } from "./whereTypes";
+import type { CentroidIds, Centroids, PolygonTiles } from "./whereTypes";
 
 const POLYGON_STYLE = {
     fillColor: "rgba(255, 215, 0, 0.25)",
@@ -45,6 +45,11 @@ const ABSOLUTE_CAP_HA = 50_000;
 
 /** `performance.getEntriesByName("where-pins")` reads when the first pins were handed to the map. */
 const PINS_MARK = "where-pins";
+/** And `"where-fill"` when the first `polygons` tile holding a feature had loaded. */
+const FILL_MARK = "where-fill";
+const POLYGONS_SOURCE = "polygons";
+/** The one layer a polygon tile carries. */
+const TILE_LAYER = "polygons";
 
 function emptyFC(): FeatureCollection {
     return { type: "FeatureCollection", features: [] };
@@ -88,6 +93,7 @@ function addPolygonLayers(
     sourceId: string,
     fillId: string,
     outlineId: string,
+    sourceLayer?: string,
 ): void {
     // Below the cluster glow, or the fill tints the gold halo.
     const beforeId = map.getLayer(PINS_GLOW_LAYER) ? PINS_GLOW_LAYER : undefined;
@@ -96,6 +102,7 @@ function addPolygonLayers(
             id: fillId,
             type: "fill",
             source: sourceId,
+            ...(sourceLayer && { "source-layer": sourceLayer }),
             minzoom: POLYGON_STYLE.minZoom,
             paint: {
                 "fill-color": POLYGON_STYLE.fillColor,
@@ -109,6 +116,7 @@ function addPolygonLayers(
             id: outlineId,
             type: "line",
             source: sourceId,
+            ...(sourceLayer && { "source-layer": sourceLayer }),
             minzoom: POLYGON_STYLE.minZoom,
             paint: {
                 "line-color": POLYGON_STYLE.outlineColor,
@@ -119,10 +127,22 @@ function addPolygonLayers(
     );
 }
 
+function markFirstFill(map: mapboxgl.Map, sourceLayer?: string): void {
+    if (typeof performance === "undefined" || performance.getEntriesByName(FILL_MARK).length) return;
+    const onData = (e: mapboxgl.MapSourceDataEvent) => {
+        if (e.sourceId !== POLYGONS_SOURCE || !e.isSourceLoaded) return;
+        if (!map.querySourceFeatures(POLYGONS_SOURCE, sourceLayer ? { sourceLayer } : {}).length) return;
+        map.off("sourcedata", onData);
+        if (!performance.getEntriesByName(FILL_MARK).length) performance.mark(FILL_MARK);
+    };
+    map.on("sourcedata", onData);
+}
+
 /**
- * Land as clustered pins from the host's centroids arrays, plus full polygon geometry fetched
- * once the camera nears `POLYGON_STYLE.minZoom`. A pin carries only its number: a click looks its
- * key up in the ids body and asks `?id=`.
+ * Land as clustered pins from the host's centroids arrays, plus the small polygons' fills from
+ * `polygonTiles` (or, without them, geometry fetched by `?bbox=` once the camera nears
+ * `POLYGON_STYLE.minZoom`). A pin carries only its number: a click looks its key up in the ids
+ * body and asks `?id=`.
  */
 export async function addMarkersLayer(
     map: mapboxgl.Map,
@@ -134,14 +154,6 @@ export async function addMarkersLayer(
         `${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}${q}`;
 
     let centroids: Centroids | null = null;
-    try {
-        centroids = (await options.centroids) ?? null;
-    } catch (err) {
-        console.error("Error loading land pins:", err);
-    }
-    if (!isMapAlive(map)) return;
-    const pins = pinsFromCentroids(centroids);
-
     const loadedCells = new Set<string>();
     const polygonFeatures = new Map<string | number, Feature>();
     type CellBox = { c0: number; c1: number; r0: number; r1: number };
@@ -280,13 +292,14 @@ export async function addMarkersLayer(
             type: "FeatureCollection",
             features: [...polygonFeatures.values()],
         };
-        const existing = map.getSource("polygons") as mapboxgl.GeoJSONSource | undefined;
+        const existing = map.getSource(POLYGONS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
         if (existing) {
             existing.setData(polygonFC);
         } else {
-            map.addSource("polygons", { type: "geojson", data: polygonFC });
-            addPolygonLayers(map, "polygons", "polygons-fill", "polygons-outline");
+            map.addSource(POLYGONS_SOURCE, { type: "geojson", data: polygonFC });
+            addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline");
             bindPolygonClicks();
+            markFirstFill(map);
         }
     }
 
@@ -330,15 +343,44 @@ export async function addMarkersLayer(
         }
     }
 
-    // Half a step early, so geometry has usually landed by the time fills show.
-    const loadTriggerZoom = POLYGON_STYLE.minZoom - 0.5;
-    const maybeLoadView = () => {
-        clearTimeout(debounceTimer);
-        if (map.getZoom() < loadTriggerZoom) return;
-        debounceTimer = setTimeout(() => void loadViewPolygons(), 250);
-    };
-    map.on("moveend", maybeLoadView);
-    maybeLoadView();
+    function loadPolygonsByBbox(): void {
+        // Half a step early, so geometry has usually landed by the time fills show.
+        const loadTriggerZoom = POLYGON_STYLE.minZoom - 0.5;
+        const maybeLoadView = () => {
+            clearTimeout(debounceTimer);
+            if (map.getZoom() < loadTriggerZoom) return;
+            debounceTimer = setTimeout(() => void loadViewPolygons(), 250);
+        };
+        map.on("moveend", maybeLoadView);
+        maybeLoadView();
+    }
+
+    function addPolygonTiles({ tiles, minzoom, maxzoom }: PolygonTiles): void {
+        if (map.getSource(POLYGONS_SOURCE)) return;
+        // A missing tile is a 404 by design (empty tiles are not written); mapbox loads it as empty.
+        map.addSource(POLYGONS_SOURCE, { type: "vector", tiles: [tiles], minzoom, maxzoom });
+        addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", TILE_LAYER);
+        bindPolygonClicks();
+        markFirstFill(map, TILE_LAYER);
+    }
+
+    // Not behind the pins: a deep link at fill zoom should not wait on the pins body.
+    void Promise.resolve(options.polygonTiles).then(
+        (tiles) => {
+            if (!isMapAlive(map)) return;
+            if (tiles) addPolygonTiles(tiles);
+            else loadPolygonsByBbox();
+        },
+        (err) => console.error("Error loading polygon tiles:", err),
+    );
+
+    try {
+        centroids = (await options.centroids) ?? null;
+    } catch (err) {
+        console.error("Error loading land pins:", err);
+    }
+    if (!isMapAlive(map)) return;
+    const pins = pinsFromCentroids(centroids);
 
     /** Ids from another build would name the wrong polygon: refused, with the alarm, never guessed. */
     async function keyOfPin(pin: number): Promise<string | undefined> {

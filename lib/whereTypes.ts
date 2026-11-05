@@ -4,6 +4,9 @@ export type Centroids = { build: string; lonlat: number[]; large: number[] };
 /** The pins' polygon keys, three times the pins' bytes, fetched beside them and read on the first click. `build` equals `Centroids.build` only when both came from one set of rows. */
 export type CentroidIds = { build: string; ids: string[] };
 
+/** The small polygons as static vector tiles: `tiles` ends `/{z}/{x}/{y}.pbf`, one layer `polygons`, each feature carrying only `polygonId`. */
+export type PolygonTiles = { tiles: string; minzoom: number; maxzoom: number };
+
 /** Coords captured at favourite time so the map can fly back without refetching centroids. */
 export type FavouriteLocation = {
 	landKey: string;

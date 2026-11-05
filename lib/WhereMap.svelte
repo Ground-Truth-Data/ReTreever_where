@@ -11,7 +11,7 @@ import { defaultOptions } from "./MAP_CONFIG";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
 import { featureCoord, toCoord } from "./coord";
-import type { CentroidIds, Centroids } from "./whereTypes";
+import type { CentroidIds, Centroids, PolygonTiles } from "./whereTypes";
 
 let {
 	map = $bindable(null),
@@ -21,6 +21,7 @@ let {
 	polygonsUrl,
 	centroids = undefined,
 	centroidIds = undefined,
+	polygonTiles = undefined,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
 }: {
@@ -33,6 +34,8 @@ let {
 	centroids?: Promise<Centroids | null>;
 	/** Their polygon keys, read on the first pin click. */
 	centroidIds?: Promise<CentroidIds | null>;
+	/** The fills as vector tiles; `null`, they come from `?bbox=`. */
+	polygonTiles?: Promise<PolygonTiles | null>;
 	userLocation?: [number, number] | null;
 	/** Must patch mapbox's prototypes before the first `new Map`. */
 	ensureMapboxGuards?: () => Promise<void>;
@@ -240,6 +243,7 @@ onMount(() => {
 			polygonsUrl,
 			centroids,
 			centroidIds: ids,
+			polygonTiles,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
 				map = m;
