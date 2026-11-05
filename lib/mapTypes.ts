@@ -41,7 +41,7 @@ export interface MapOptions {
     centroids?: Promise<Centroids | null>;
     /** The pins' polygon keys, in flight beside `centroids`; awaited on the first pin click, never before. */
     centroidIds?: Promise<CentroidIds | null>;
-    /** The fills as vector tiles; `null` or absent, they come from `?bbox=` (the key holder sees rows the tiles leave out). */
+    /** The fills as vector tiles; `null` or absent, they come from `?bbox=` (the key holder sees rows the tiles leave out); a rejection draws none, as a public `?bbox=` answers 410. */
     polygonTiles?: Promise<PolygonTiles | null>;
     loadMarkers?: boolean;
     style?: string;

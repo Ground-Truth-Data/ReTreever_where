@@ -76,6 +76,23 @@ describe("addMarkersLayer — where the fills come from", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it("adds no fills and never asks ?bbox= when the tiles reject", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const map = fakeMap();
+        await addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: Promise.resolve(null),
+            polygonTiles: Promise.reject(new Error("latest.json failed")),
+        });
+        await new Promise((r) => setTimeout(r, 300));
+
+        expect(map.sources.has("polygons")).toBe(false);
+        expect(map.handlers.some(([type]) => type === "moveend")).toBe(false);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(error).toHaveBeenCalledTimes(1);
+        error.mockRestore();
+    });
+
     it.each([
         ["null", Promise.resolve(null)],
         ["absent", undefined],
