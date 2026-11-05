@@ -472,5 +472,16 @@ export function initializeMap(
     };
 }
 
+/**
+ * The URL Mapbox fetches for the default style, so a page can preload it with its HTML.
+ * Must match Mapbox's own spelling byte for byte, or the browser fetches the style twice.
+ */
+export function defaultStyleUrl(): string | null {
+    const token = import.meta.env.PUBLIC_GC_RT_mapbox_token;
+    if (!token) return null;
+    const path = defaultSatStyle.replace("mapbox://styles/", "");
+    return `https://api.mapbox.com/styles/v1/${path}?sdk=js-${mapboxgl.version}&access_token=${token}`;
+}
+
 export { fullMapOptions, compactGlobeOptions };
 export type { MapOptions, PolygonConfig } from "./mapTypes";
