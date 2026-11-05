@@ -5,7 +5,13 @@ export type Centroids = { build: string; lonlat: number[]; large: number[] };
 export type CentroidIds = { build: string; ids: string[] };
 
 /** The small polygons as static vector tiles: `tiles` ends `/{z}/{x}/{y}.pbf`, one layer `polygons`, each feature carrying only `polygonId`. */
-export type PolygonTiles = { tiles: string; minzoom: number; maxzoom: number };
+export type PolygonTiles = {
+	tiles: string;
+	minzoom: number;
+	maxzoom: number;
+	/** Maps a tile request's URL to the one to fetch; a URL these tiles don't own comes back unchanged. */
+	tileUrl: (url: string) => string;
+};
 
 /** Coords captured at favourite time so the map can fly back without refetching centroids. */
 export type FavouriteLocation = {

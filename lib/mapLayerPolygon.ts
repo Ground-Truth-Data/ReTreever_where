@@ -138,6 +138,33 @@ function markFirstFill(map: mapboxgl.Map, sourceLayer?: string): void {
     map.on("sourcedata", onData);
 }
 
+type TransformRequest = NonNullable<MapOptions["transformRequest"]>;
+
+/**
+ * Mapbox reads `transformRequest` only at construction, so the map is born with this one, which rewrites
+ * `Tile` URLs once the tiles resolve. The returned `polygonTiles` settles only after that, so a source added
+ * on it never asks for an unrewritten tile.
+ */
+export function polygonTileRequests(
+    polygonTiles: Promise<PolygonTiles | null>,
+    next?: TransformRequest,
+): { polygonTiles: Promise<PolygonTiles | null>; transformRequest: TransformRequest } {
+    let tileUrl: ((url: string) => string) | undefined;
+    const ready = polygonTiles.then((tiles) => {
+        tileUrl = tiles?.tileUrl;
+        return tiles;
+    });
+    // The map still receives the rejection; this only keeps a map without markers from logging it unhandled.
+    ready.catch(() => {});
+    return {
+        polygonTiles: ready,
+        transformRequest: (url, resourceType) => {
+            const to = resourceType === "Tile" && tileUrl ? tileUrl(url) : url;
+            return next ? next(to, resourceType) : { url: to };
+        },
+    };
+}
+
 /**
  * Land as clustered pins from the host's centroids arrays, plus the small polygons' fills from
  * `polygonTiles` (or, without them, geometry fetched by `?bbox=` once the camera nears
@@ -357,7 +384,7 @@ export async function addMarkersLayer(
 
     function addPolygonTiles({ tiles, minzoom, maxzoom }: PolygonTiles): void {
         if (map.getSource(POLYGONS_SOURCE)) return;
-        // The build writes no empty tiles; the route answers one as an empty 200, which mapbox draws as nothing and never logs.
+        // A z/x/y with no tile resolves to the one empty tile, an empty 200 that mapbox draws as nothing and never logs.
         map.addSource(POLYGONS_SOURCE, { type: "vector", tiles: [tiles], minzoom, maxzoom });
         addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", TILE_LAYER);
         bindPolygonClicks();

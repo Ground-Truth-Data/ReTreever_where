@@ -12,7 +12,7 @@ import {
     defaultStyleOptions,
     styleIdFromUrl,
 } from "./mapControlBaseToggle";
-import { addMarkersLayer } from "./mapLayerPolygon";
+import { addMarkersLayer, polygonTileRequests } from "./mapLayerPolygon";
 import type { MapOptions } from "./mapTypes";
 import { applyNaturalOverrides, NATURAL_FOG } from "./mapStyleNatural";
 import { parseMapHash, setMapHash } from "./mapUtilsHash";
@@ -152,6 +152,12 @@ export function initializeMap(
             got: { center: opts.initialCenter, zoom: opts.initialZoom },
             using: { center: safeCenter, zoom: safeZoom },
         });
+    }
+
+    if (opts.polygonTiles) {
+        const tileRequests = polygonTileRequests(opts.polygonTiles, opts.transformRequest);
+        opts.polygonTiles = tileRequests.polygonTiles;
+        opts.transformRequest = tileRequests.transformRequest;
     }
 
     const map = new mapboxgl.Map({
