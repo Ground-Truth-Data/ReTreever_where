@@ -357,7 +357,7 @@ export async function addMarkersLayer(
 
     function addPolygonTiles({ tiles, minzoom, maxzoom }: PolygonTiles): void {
         if (map.getSource(POLYGONS_SOURCE)) return;
-        // A missing tile is a 404 by design (empty tiles are not written); mapbox loads it as empty.
+        // The build writes no empty tiles; the route answers one as an empty 200, which mapbox draws as nothing and never logs.
         map.addSource(POLYGONS_SOURCE, { type: "vector", tiles: [tiles], minzoom, maxzoom });
         addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", TILE_LAYER);
         bindPolygonClicks();
