@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("mapbox-gl", () => ({ default: {} }));
 vi.mock("./mapMarker", () => ({ addClusteredPins: vi.fn(), isMapAlive: () => true }));
 vi.mock("./safeEase", () => ({ safeEase: vi.fn() }));
+// ReTreever's paraglide output: absent in a bare clone, so the child's own `npm test` stubs it.
+vi.mock("$parent/src/lib/paraglide/messages", () => ({ m: new Proxy({}, { get: (_, k) => () => String(k) }) }));
+vi.mock("$parent/src/lib/paraglide/runtime", () => ({ getLocale: () => "en" }));
 
 import { addMarkersLayer, polygonTileRequests } from "./mapLayerPolygon";
 
