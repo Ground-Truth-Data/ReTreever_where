@@ -1333,8 +1333,9 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 		margin-top: 0.2rem;
 	}
 
+	/* --rt-fg: the panel is half see-through over the map, and no quieter token keeps 4.5:1 on it; size keeps it second. */
 	.marker-org-role {
-		color: var(--rt-fg-muted);
+		color: var(--rt-fg);
 		font-size: 0.9em;
 		margin-left: 0.35em;
 	}
