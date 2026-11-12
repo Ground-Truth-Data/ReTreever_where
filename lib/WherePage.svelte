@@ -575,7 +575,7 @@ const roleWords = (roles: string[]) =>
 					{/if}
 					<div class="marker-row">
 						<dt>{organizations.length > 1 ? m.wh_row_organizations() : m.wh_row_organization()}</dt>
-						<dd class="marker-orgs">
+						<dd>
 							{#each organizations as org, i (i)}
 								{@const role = roleWords(org.roles)}
 								<span class="marker-org">
@@ -1320,15 +1320,10 @@ const roleWords = (roles: string[]) =>
 		flex-shrink: 0;
 	}
 
+	/* Wrap between words; a long unbroken key still breaks rather than overflow. */
 	.marker-row dd {
 		margin: 0;
 		color: #fff;
-		word-break: break-all;
-	}
-
-	/* break-all would split a name mid-word. */
-	.marker-row dd.marker-orgs {
-		word-break: normal;
 		overflow-wrap: anywhere;
 	}
 
