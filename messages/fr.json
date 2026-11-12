@@ -32,6 +32,7 @@
 	"wh_land_unnamed": "Terrain sans nom",
 	"wh_land_this": "Ce terrain",
 	"wh_land_load_failed": "Ce terrain ne s’est pas chargé. Touchez à nouveau l’épingle.",
+	"wh_land_missing": "Ce terrain n’est plus sur la carte.",
 	"wh_favourites_title": "Favoris",
 	"wh_favourites_close": "Fermer les favoris",
 	"wh_favourites_empty": "Aucun favori pour l’instant — sélectionnez une épingle et touchez son ★.",

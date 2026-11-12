@@ -1,7 +1,6 @@
 <script lang="ts">
-import { onMount } from "svelte";
+import { onMount, untrack } from "svelte";
 import { goto, replaceState } from "$app/navigation";
-import { page } from "$app/stores";
 import "mapbox-gl/dist/mapbox-gl.css";
 import {
 	fullMapOptions,
@@ -12,6 +11,7 @@ import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
 import { featureCoord, toCoord } from "./coord";
 import type { Centroids, PolygonTiles } from "./whereTypes";
+import { landTitle, parseLandSegment, whereBase } from "./landPath";
 
 let {
 	map = $bindable(null),
@@ -19,6 +19,8 @@ let {
 	viewChanged = $bindable(false),
 	markerSvg = undefined,
 	polygonsUrl,
+	land = null,
+	landMissing = false,
 	centroids = undefined,
 	polygonTiles = undefined,
 	userLocation = null,
@@ -29,6 +31,10 @@ let {
 	viewChanged?: boolean;
 	markerSvg?: string;
 	polygonsUrl?: string;
+	/** The land this page opens, resolved by the host from its path: the drawer's own answer. */
+	land?: { properties: any } | null;
+	/** The page names a land that isn't on the map. */
+	landMissing?: boolean;
 	/** The pins, already in flight when the host handed them over. */
 	centroids?: Promise<Centroids | null>;
 	/** Their polygon keys, read on the first pin click. */
@@ -68,16 +74,36 @@ function syncViewChanged() {
 		m.getPitch() !== 0;
 }
 
+function openLand(feature: any) {
+	selectedFeature = feature;
+	if (map) flyToAndSelect(map, feature);
+	else pendingFeature = feature;
+}
+
+$effect(() => {
+	const opened = land?.properties;
+	const missing = landMissing;
+	untrack(() => {
+		if (opened) openLand(opened);
+		else if (missing) selectedFeature = { missing: true };
+	});
+});
+
+// A path holds a land only while its drawer is open: closing, however it closes, returns to the map's own.
+$effect(() => {
+	if (selectedFeature) return;
+	const { pathname, search } = window.location;
+	const base = whereBase(pathname);
+	const params = new URLSearchParams(search);
+	if (base === pathname && !params.has("land")) return;
+	params.delete("land");
+	const query = params.size ? `?${params}` : "";
+	untrack(() => void goto(`${base}${query}`, { replaceState: true, noScroll: true, keepFocus: true }));
+});
+
 export function resetView() {
 	selectedFeature = null;
 	pendingFeature = null;
-
-	const url = new URL($page.url);
-	url.searchParams.delete("land");
-	void goto(`${url.pathname}${url.search}`, {
-		replaceState: true,
-		noScroll: true,
-	});
 
 	const m = map;
 	if (!m) return;
@@ -203,8 +229,7 @@ onMount(() => {
 		await ensureMapboxGuards();
 		if (disposed) return;
 
-		const landParam = $page.url.searchParams.get("land");
-		const hasTarget = !!landParam;
+		const hasTarget = !!land?.properties;
 
 		fullMapOptions.autoRotate = !hasTarget;
 		fullMapOptions.showZoomReadout = true;
@@ -213,14 +238,12 @@ onMount(() => {
 		const isMobile = window.innerWidth < 768;
 		if (isMobile) homeZoom = MOBILE_HOME_ZOOM;
 
+		// Shallow: the drawer already has the land, so the address changes without asking the server again.
 		const handleFeatureSelect = (feature: any) => {
 			selectedFeature = feature;
-			if (feature?.landKey) {
-				const base = $page.url.pathname;
-				goto(`${base}?land=${encodeURIComponent(feature.landKey)}`, {
-					replaceState: true,
-					noScroll: true,
-				});
+			if (feature?.landSegment) {
+				const path = `${whereBase(window.location.pathname)}/${feature.landSegment}`;
+				replaceState(path, { landTitle: landTitle(feature.landName, feature.projectName) });
 			}
 		};
 
@@ -230,7 +253,10 @@ onMount(() => {
 			showStyleControl: false,
 			showScale: true,
 			enableHash: true,
-			writeHash: (url) => replaceState(url, {}),
+			// An open land frames itself, so its link carries no camera.
+			writeHash: (url) => {
+				if (!selectedFeature && !parseLandSegment(window.location.pathname.split("/").pop() ?? "")) replaceState(url, {});
+			},
 			...(isMobile && {
 				showDrawTools: false,
 				initialZoom: MOBILE_HOME_ZOOM,
@@ -260,27 +286,6 @@ onMount(() => {
 			},
 		});
 
-		// The pins carry no land keys; the server resolves the link to its polygon, names and all.
-		if (landParam && polygonsUrl) {
-			(async () => {
-				try {
-					const response = await fetch(
-						`${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}land=${encodeURIComponent(landParam)}`,
-					);
-					if (!response.ok) return;
-					const data: { properties?: any } = await response.json();
-					const targetFeature: any = data.properties ?? null;
-					if (!targetFeature) return;
-					if (map) {
-						flyToAndSelect(map, targetFeature);
-					} else {
-						pendingFeature = targetFeature;
-					}
-				} catch (error) {
-					console.error("Error pre-loading feature:", error);
-				}
-			})();
-		}
 	})();
 
 	return () => {

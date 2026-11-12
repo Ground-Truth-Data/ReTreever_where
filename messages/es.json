@@ -32,6 +32,7 @@
 	"wh_land_unnamed": "Terreno sin nombre",
 	"wh_land_this": "Este terreno",
 	"wh_land_load_failed": "Este terreno no se cargó. Toque el marcador de nuevo.",
+	"wh_land_missing": "Este terreno ya no está en el mapa.",
 	"wh_favourites_title": "Favoritos",
 	"wh_favourites_close": "Cerrar favoritos",
 	"wh_favourites_empty": "Aún no hay favoritos — seleccione un marcador y toque su ★.",

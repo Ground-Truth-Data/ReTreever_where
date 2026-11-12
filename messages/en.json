@@ -32,6 +32,7 @@
 	"wh_land_unnamed": "Unnamed land",
 	"wh_land_this": "This land",
 	"wh_land_load_failed": "This land didn’t load. Tap the pin again.",
+	"wh_land_missing": "This land isn’t on the map any more.",
 	"wh_favourites_title": "Favourites",
 	"wh_favourites_close": "Close favourites",
 	"wh_favourites_empty": "No favourites yet — select a marker and tap its ★.",

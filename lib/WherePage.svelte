@@ -10,7 +10,8 @@ import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
 import { featureCoord } from "./coord";
 import { m } from "$parent/src/lib/paraglide/messages";
-import { getLocale, localizeHref } from "$parent/src/lib/paraglide/runtime";
+import { localizeHref } from "$parent/src/lib/paraglide/runtime";
+import { formatHectares, roleWords } from "./roleWords";
 import {
 	formatTransparencyScore,
 	type Centroids,
@@ -48,6 +49,8 @@ let {
 	routes = {},
 	ensureMapboxGuards = async () => {},
 	polygonsUrl,
+	land = null,
+	landMissing = false,
 	centroids = undefined,
 	polygonTiles = undefined,
 	view = null,
@@ -59,6 +62,10 @@ let {
 	routes?: WhereRoutes;
 	ensureMapboxGuards?: () => Promise<void>;
 	polygonsUrl?: string;
+	/** The land this page's path names, as the drawer's answer; its host resolved it. */
+	land?: { properties: any } | null;
+	/** The path names a land that isn't on the map. */
+	landMissing?: boolean;
 	/** The pins, started by the host at navigation so they land with the globe. */
 	centroids?: Promise<Centroids | null>;
 	/** Their polygon keys, read on the first pin click. */
@@ -262,10 +269,6 @@ function flyToFavourite(fav: FavouriteLocation) {
 	favouritesOpen = false;
 }
 
-function formatHectares(hectares: number): string {
-	return Math.round(hectares).toLocaleString(getLocale());
-}
-
 let detailsHref = $derived(
 	selectedFeature?.projectKey && routes.whatProject
 		? localizeHref(routes.whatProject(selectedFeature.projectKey))
@@ -276,17 +279,8 @@ let detailsHref = $derived(
 
 let organizations: { name: string; whoKey: string | null; roles: string[] }[] = $derived(selectedFeature?.organizations ?? []);
 const orgHref = (whoKey: string | null) => (whoKey && routes.whoOrg ? localizeHref(routes.whoOrg(whoKey)) : null);
-// Keyed by StakeholderCategoryTable ids; a role with no word here shows no label.
-const ROLE_WORDS: Record<string, () => string> = {
-	developer_ish: m.wh_role_developer,
-	producer_ish: m.wh_role_producer,
-	landowner_ish: m.wh_role_landowner,
-	sponsor_ish: m.wh_role_sponsor,
-	marketplace_ish: m.wh_role_marketplace,
-	research_ish: m.wh_role_research,
-};
-const roleWords = (roles: string[]) =>
-	new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(roles.flatMap((r) => (ROLE_WORDS[r] ? [ROLE_WORDS[r]()] : [])));
+// The land's own page: the link to share, and the one a reload reopens.
+let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}/${selectedFeature.landSegment}`) : detailsHref);
 </script>
 
 <div class="where-stage">
@@ -299,6 +293,8 @@ const roleWords = (roles: string[]) =>
 		{userLocation}
 		{ensureMapboxGuards}
 		{polygonsUrl}
+		{land}
+		{landMissing}
 		{centroids}
 		{polygonTiles}
 	/>
@@ -541,9 +537,11 @@ const roleWords = (roles: string[]) =>
 						{selectedIsFavourite ? "★" : "☆"}
 					</button>
 				{/if}
-				{#if selectedFeature.loading || selectedFeature.failed}
+				{#if selectedFeature.loading || selectedFeature.failed || selectedFeature.missing}
 					<div class="marker-pending" aria-busy={selectedFeature.loading ? "true" : undefined}>
-						{#if selectedFeature.failed}
+						{#if selectedFeature.missing}
+							<p class="marker-failed">{m.wh_land_missing()}</p>
+						{:else if selectedFeature.failed}
 							<p class="marker-failed">{m.wh_land_load_failed()}</p>
 						{:else}
 							<span class="sk sk-title"></span>
@@ -569,7 +567,7 @@ const roleWords = (roles: string[]) =>
 						<div class="marker-row">
 							<dt>{m.wh_row_land()}</dt>
 							<dd>
-								<a href={detailsHref}>{selectedFeature.landName ?? m.wh_land_unnamed()}</a>
+								<a href={landHref}>{selectedFeature.landName ?? m.wh_land_unnamed()}</a>
 							</dd>
 						</div>
 					{/if}
