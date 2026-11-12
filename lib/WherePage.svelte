@@ -274,11 +274,8 @@ let detailsHref = $derived(
 			: null,
 );
 
-let orgHref = $derived(
-	selectedFeature?.organizationWhoKey && routes.whoOrg
-		? localizeHref(routes.whoOrg(selectedFeature.organizationWhoKey))
-		: null,
-);
+let organizations: { name: string; whoKey: string | null }[] = $derived(selectedFeature?.organizations ?? []);
+const orgHref = (whoKey: string | null) => (whoKey && routes.whoOrg ? localizeHref(routes.whoOrg(whoKey)) : null);
 </script>
 
 <div class="where-stage">
@@ -566,15 +563,10 @@ let orgHref = $derived(
 						</div>
 					{/if}
 					<div class="marker-row">
-						<dt>{m.wh_row_organization()}</dt>
-						<dd>
-							{#if orgHref}
-								<a href={orgHref}>
-									{selectedFeature.organizationName ?? selectedFeature.organizationKey}
-								</a>
-							{:else}
-								{selectedFeature.organizationName ?? m.wh_org_none()}
-							{/if}
+						<dt>{organizations.length > 1 ? m.wh_row_organizations() : m.wh_row_organization()}</dt>
+						<dd class="marker-orgs">
+							<!-- One line: a newline here would put a space before each comma. -->
+							{#each organizations as org, i (i)}{#if i > 0}{", "}{/if}{#if orgHref(org.whoKey)}<a href={orgHref(org.whoKey)}>{org.name}</a>{:else}{org.name}{/if}{:else}{m.wh_org_none()}{/each}
 						</dd>
 					</div>
 					{#if selectedFeature.projectName}
@@ -1314,6 +1306,12 @@ let orgHref = $derived(
 		margin: 0;
 		color: #fff;
 		word-break: break-all;
+	}
+
+	/* A list of names wraps between them; break-all would split a name mid-word. */
+	.marker-row dd.marker-orgs {
+		word-break: normal;
+		overflow-wrap: anywhere;
 	}
 
 	.marker-row a {
