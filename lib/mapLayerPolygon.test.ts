@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("mapbox-gl", () => ({ default: {} }));
 vi.mock("./mapMarker", () => ({ addClusteredPins: vi.fn(), isMapAlive: () => true }));
+import { addClusteredPins } from "./mapMarker";
 vi.mock("./safeEase", () => ({ safeEase: vi.fn() }));
 // ReTreever's paraglide output: absent in a bare clone, so the child's own `npm test` stubs it.
 vi.mock("$parent/src/lib/paraglide/messages", () => ({ m: new Proxy({}, { get: (_, k) => () => String(k) }) }));
@@ -44,7 +45,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 const ROOT = "https://t.example/api/where/tiles";
 const TEMPLATE = `${ROOT}/polygons/{z}/{x}/{y}.pbf`;
-const TILES = { tiles: TEMPLATE, minzoom: 7, maxzoom: 12 };
+const TILES = { build: "B1", tiles: TEMPLATE, minzoom: 7, maxzoom: 12 };
 /** A stand-in for the host's resolver: owns only its own template's URLs. */
 const rewrite = (url: string) =>
     url.replace(/^(.*\/polygons\/\d+\/\d+\/\d+)\.pbf$/, "$1/B1.pbf");
@@ -116,6 +117,61 @@ describe("addMarkersLayer — where the fills come from", () => {
         expect(String(fetchMock.mock.calls[0][0])).toMatch(/^\/api\/where\/polygons\?bbox=/);
         expect(map.sources.get("polygons")?.type).toBe("geojson");
         expect(map.layers.get("polygons-fill")?.["source-layer"]).toBeUndefined();
+    });
+});
+
+describe("addMarkersLayer — a click asks for a pin by its number, never by a key", () => {
+    const PIN_BUILD = "20261112T140543Z-8d6d4c6e";
+    let fetchMock: ReturnType<typeof vi.fn>;
+    const answer = { type: "Feature", geometry: null, properties: { landKey: "l1", landName: "A land" } };
+
+    beforeEach(() => {
+        fetchMock = vi.fn(async () => new Response(JSON.stringify(answer)));
+        vi.stubGlobal("fetch", fetchMock);
+        vi.mocked(addClusteredPins).mockClear();
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    async function mapWith(fillProps: Record<string, unknown> | null) {
+        const selected: Record<string, unknown>[] = [];
+        const map = { ...fakeMap(), queryRenderedFeatures: () => (fillProps ? [{ properties: fillProps }] : []) };
+        await addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: Promise.resolve({ build: PIN_BUILD, lonlat: [35, -6, 36, -7], large: [0, 1] }),
+            polygonTiles: Promise.resolve({ ...TILES, build: PIN_BUILD, tileUrl: rewrite }),
+            onFeatureSelect: (f) => selected.push(f as Record<string, unknown>),
+        });
+        await flush();
+        const fillClick = map.handlers.find(([type]) => type === "click")?.[1];
+        return { map, selected, fillClick };
+    }
+
+    it("a pin click asks ?pin=<build>/<n>", async () => {
+        const { selected } = await mapWith(null);
+        const { onPointClick } = vi.mocked(addClusteredPins).mock.calls[0][1] as { onPointClick: (f: unknown) => void };
+        onPointClick({ geometry: { type: "Point", coordinates: [36, -7] }, properties: { pin: 1 } });
+        await flush();
+        expect(fetchMock.mock.calls.map(([u]) => String(u))).toEqual([`/api/where/polygons?pin=${encodeURIComponent(`${PIN_BUILD}/1`)}`]);
+        expect(selected.at(-1)).toEqual(answer.properties);
+    });
+
+    it("a fill click asks for the fill's pin in the tiles' build", async () => {
+        const { fillClick, selected } = await mapWith({ pin: 7 });
+        fillClick?.({ point: { x: 1, y: 1 }, lngLat: { toArray: () => [35, -6] } });
+        await flush();
+        expect(fetchMock.mock.calls.map(([u]) => String(u))).toEqual([`/api/where/polygons?pin=${encodeURIComponent(`${PIN_BUILD}/7`)}`]);
+        expect(selected.at(-1)).toEqual(answer.properties);
+    });
+
+    it("a fill from a tile with no pin (one built before pins were numbered) fails quietly in the drawer and asks nothing", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const { fillClick, selected } = await mapWith({ polygonId: "c-some-key" });
+        fillClick?.({ point: { x: 1, y: 1 }, lngLat: { toArray: () => [35, -6] } });
+        await flush();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(selected.map((s) => ("failed" in s ? "failed" : "loading" in s ? "loading" : "other"))).toEqual(["loading", "failed"]);
+        expect(error).not.toHaveBeenCalled();
+        error.mockRestore();
     });
 });
 

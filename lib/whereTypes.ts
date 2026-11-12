@@ -1,11 +1,9 @@
-/** The pins as the host serves them: pin `i` sits at `lonlat[2i], lonlat[2i+1]`; `large[i]` is 0 small, 1 large, 2 past the render cap. Its polygon key is `CentroidIds.ids[i]` of the same `build`. */
+/** The pins as the host serves them: pin `i` sits at `lonlat[2i], lonlat[2i+1]`; `large[i]` is 0 small, 1 large, 2 past the render cap. A click asks the host for `<build>/<i>`: no key list reaches the browser. */
 export type Centroids = { build: string; lonlat: number[]; large: number[] };
 
-/** The pins' polygon keys, three times the pins' bytes, fetched beside them and read on the first click. `build` equals `Centroids.build` only when both came from one set of rows. */
-export type CentroidIds = { build: string; ids: string[] };
-
-/** The small polygons as static vector tiles: `tiles` ends `/{z}/{x}/{y}.pbf`, one layer `polygons`, each feature carrying only `polygonId`. */
+/** The small polygons as static vector tiles of `build`: `tiles` ends `/{z}/{x}/{y}.pbf`, one layer `polygons`, each feature carrying only `pin`, its number in that build. */
 export type PolygonTiles = {
+	build: string;
 	tiles: string;
 	minzoom: number;
 	maxzoom: number;

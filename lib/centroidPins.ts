@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, Point } from "geojson";
 import type { Centroids } from "./whereTypes";
 
-/** What a pin carries: enough to cluster, to zoom, and to find its key at `CentroidIds.ids[pin]`. */
+/** What a pin carries: enough to cluster, to zoom, and to be asked for by its number. */
 export type PinProperties = {
     pin: number;
     isLargePolygon: boolean;

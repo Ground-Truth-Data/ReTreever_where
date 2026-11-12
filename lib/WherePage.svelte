@@ -13,7 +13,6 @@ import { m } from "$parent/src/lib/paraglide/messages";
 import { getLocale, localizeHref } from "$parent/src/lib/paraglide/runtime";
 import {
 	formatTransparencyScore,
-	type CentroidIds,
 	type Centroids,
 	type FavouriteLocation,
 	type PolygonTiles,
@@ -50,7 +49,6 @@ let {
 	ensureMapboxGuards = async () => {},
 	polygonsUrl,
 	centroids = undefined,
-	centroidIds = undefined,
 	polygonTiles = undefined,
 	view = null,
 	basePath = "/where",
@@ -64,7 +62,6 @@ let {
 	/** The pins, started by the host at navigation so they land with the globe. */
 	centroids?: Promise<Centroids | null>;
 	/** Their polygon keys, read on the first pin click. */
-	centroidIds?: Promise<CentroidIds | null>;
 	/** The fills as vector tiles, beside the pins; `null`, the map asks `?bbox=`. */
 	polygonTiles?: Promise<PolygonTiles | null>;
 	ontogglefavourite?: (loc: FavouriteLocation) => void;
@@ -295,7 +292,6 @@ let orgHref = $derived(
 		{ensureMapboxGuards}
 		{polygonsUrl}
 		{centroids}
-		{centroidIds}
 		{polygonTiles}
 	/>
 

@@ -11,7 +11,7 @@ import { defaultOptions } from "./MAP_CONFIG";
 import { safeEase } from "./safeEase";
 import { safeJumpTo } from "./safeMap";
 import { featureCoord, toCoord } from "./coord";
-import type { CentroidIds, Centroids, PolygonTiles } from "./whereTypes";
+import type { Centroids, PolygonTiles } from "./whereTypes";
 
 let {
 	map = $bindable(null),
@@ -20,7 +20,6 @@ let {
 	markerSvg = undefined,
 	polygonsUrl,
 	centroids = undefined,
-	centroidIds = undefined,
 	polygonTiles = undefined,
 	userLocation = null,
 	ensureMapboxGuards = async () => {},
@@ -33,7 +32,6 @@ let {
 	/** The pins, already in flight when the host handed them over. */
 	centroids?: Promise<Centroids | null>;
 	/** Their polygon keys, read on the first pin click. */
-	centroidIds?: Promise<CentroidIds | null>;
 	/** The fills as vector tiles; `null`, they come from `?bbox=`. */
 	polygonTiles?: Promise<PolygonTiles | null>;
 	userLocation?: [number, number] | null;
@@ -226,7 +224,6 @@ onMount(() => {
 			}
 		};
 
-		const ids = centroidIds;
 		mapCleanup = initializeMap(mapContainer, {
 			...fullMapOptions,
 			showNavigation: false,
@@ -242,7 +239,6 @@ onMount(() => {
 			loadMarkers: true,
 			polygonsUrl,
 			centroids,
-			centroidIds: ids,
 			polygonTiles,
 			onFeatureSelect: handleFeatureSelect,
 			onMapReady: (m) => {
@@ -252,10 +248,6 @@ onMount(() => {
 				m.once("idle", () => {
 					splashVisible = false;
 				});
-				// A host may hold the keys back until read; read them now the globe is up, before the first click.
-				const readIds = () => void ids?.then(() => {});
-				if ("requestIdleCallback" in window) requestIdleCallback(readIds, { timeout: 3000 });
-				else setTimeout(readIds, 500);
 				setTimeout(() => {
 					splashVisible = false;
 				}, 3000);

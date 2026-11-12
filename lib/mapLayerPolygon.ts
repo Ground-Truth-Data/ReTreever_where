@@ -16,7 +16,7 @@ import { MAP_CONFIG } from "./MAP_CONFIG";
 import { addClusteredPins, isMapAlive } from "./mapMarker";
 import type { MapOptions } from "./mapTypes";
 import { safeEase } from "./safeEase";
-import type { CentroidIds, Centroids, PolygonTiles } from "./whereTypes";
+import type { Centroids, PolygonTiles } from "./whereTypes";
 
 const POLYGON_STYLE = {
     fillColor: "rgba(255, 215, 0, 0.25)",
@@ -168,8 +168,8 @@ export function polygonTileRequests(
 /**
  * Land as clustered pins from the host's centroids arrays, plus the small polygons' fills from
  * `polygonTiles` (or, without them, geometry fetched by `?bbox=` once the camera nears
- * `POLYGON_STYLE.minZoom`). A pin carries only its number: a click looks its key up in the ids
- * body and asks `?id=`.
+ * `POLYGON_STYLE.minZoom`). A pin and a fill carry only their number in a build: a click asks
+ * `?pin=<build>/<n>`, and the host resolves it.
  */
 export async function addMarkersLayer(
     map: mapboxgl.Map,
@@ -191,31 +191,28 @@ export async function addMarkersLayer(
         map.getSource(PREVIEW_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
 
     /**
-     * The drawer opens on the pin at once and fills from `?id=` — the one query a visitor waits
-     * for. A large polygon's geometry comes in the same answer and draws as the preview. A pin
-     * hands its key over as a promise: the ids body is awaited here, on the first click, not before.
+     * The drawer opens on the click at once and fills from `?pin=` — the one query a visitor waits
+     * for. A large polygon's geometry comes in the same answer and draws as the preview. With no
+     * pin to ask for (a tile from before pins were numbered), the drawer says so and asks nothing.
      */
     async function selectPolygon(
-        key: string | Promise<string | undefined>,
+        pin: string | null,
         center: [number, number],
     ): Promise<void> {
         if (options.compact) return;
         safeEase(map, { center, zoom: MAP_CONFIG.cluster.clickZoom });
         const centroid = { type: "Point", coordinates: center };
         options.onFeatureSelect?.({ centroid, loading: true });
-        let polygonId: string | undefined;
         try {
-            polygonId = await key;
-            if (!isMapAlive(map)) return;
-            if (!polygonId) {
+            if (!pin) {
                 options.onFeatureSelect?.({ centroid, failed: true });
                 return;
             }
-            const response = await fetch(withQuery(`id=${encodeURIComponent(polygonId)}`));
+            const response = await fetch(withQuery(`pin=${encodeURIComponent(pin)}`));
             if (!isMapAlive(map)) return;
             if (!response.ok) {
                 console.error("Failed to fetch polygon:", response.status);
-                options.onFeatureSelect?.({ polygonId, centroid, failed: true });
+                options.onFeatureSelect?.({ centroid, failed: true });
                 return;
             }
             const feature = (await response.json()) as Feature<
@@ -236,11 +233,14 @@ export async function addMarkersLayer(
             options.onFeatureSelect?.(properties);
         } catch (err) {
             console.error("Failed to fetch polygon:", err);
-            if (isMapAlive(map)) options.onFeatureSelect?.({ polygonId, centroid, failed: true });
+            if (isMapAlive(map)) options.onFeatureSelect?.({ centroid, failed: true });
         }
     }
 
-    function bindPolygonClicks(): void {
+    const pinRef = (build: string | undefined, pin: unknown) =>
+        build && typeof pin === "number" && Number.isInteger(pin) && pin >= 0 ? `${build}/${pin}` : null;
+
+    function bindPolygonClicks(tilesBuild?: string): void {
         if (options.compact) return;
         map.on("click", "polygons-fill", (e) => {
             // A pin sits inside its own fill; its handler owns that click, or `?id=` is asked twice.
@@ -249,10 +249,9 @@ export async function addMarkersLayer(
             const properties = map.queryRenderedFeatures(e.point, {
                 layers: ["polygons-fill"],
             })[0]?.properties;
-            const polygonId = properties?.polygonId as string | undefined;
-            if (!polygonId) return;
+            if (!properties) return;
             const center = featureCoord(properties) ?? (e.lngLat.toArray() as [number, number]);
-            void selectPolygon(polygonId, [center[0], center[1]]);
+            void selectPolygon(pinRef(tilesBuild, properties.pin), [center[0], center[1]]);
         });
         map.on("mouseenter", "polygons-fill", () => {
             map.getCanvas().style.cursor = "pointer";
@@ -382,12 +381,12 @@ export async function addMarkersLayer(
         maybeLoadView();
     }
 
-    function addPolygonTiles({ tiles, minzoom, maxzoom }: PolygonTiles): void {
+    function addPolygonTiles({ build, tiles, minzoom, maxzoom }: PolygonTiles): void {
         if (map.getSource(POLYGONS_SOURCE)) return;
         // A z/x/y with no tile resolves to the one empty tile, an empty 200 that mapbox draws as nothing and never logs.
         map.addSource(POLYGONS_SOURCE, { type: "vector", tiles: [tiles], minzoom, maxzoom });
         addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", TILE_LAYER);
-        bindPolygonClicks();
+        bindPolygonClicks(build);
         markFirstFill(map, TILE_LAYER);
     }
 
@@ -409,25 +408,15 @@ export async function addMarkersLayer(
     if (!isMapAlive(map)) return;
     const pins = pinsFromCentroids(centroids);
 
-    /** Ids from another build would name the wrong polygon: refused, with the alarm, never guessed. */
-    async function keyOfPin(pin: number): Promise<string | undefined> {
-        const ids: CentroidIds | null = (await options.centroidIds) ?? null;
-        if (!ids || !centroids || ids.build !== centroids.build) {
-            console.error("Pin ids missing or from another build:", ids?.build, centroids?.build);
-            return undefined;
-        }
-        return ids.ids[pin];
-    }
-
     addClusteredPins(map, {
         id: PINS_ID,
         data: pins,
         markerSvg: options.markerSvg,
         onPointClick: (feature) => {
-            const pin = feature.properties?.pin as number | undefined;
-            if (pin === undefined) return;
+            const pin = pinRef(centroids?.build, feature.properties?.pin);
+            if (!pin) return;
             const coordinates = (feature.geometry as Point).coordinates.slice() as [number, number];
-            void selectPolygon(keyOfPin(pin), coordinates);
+            void selectPolygon(pin, coordinates);
         },
     });
     if (typeof performance !== "undefined" && !performance.getEntriesByName(PINS_MARK).length) {

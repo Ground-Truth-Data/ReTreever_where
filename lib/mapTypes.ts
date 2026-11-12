@@ -1,5 +1,5 @@
 import type * as mapboxgl from "mapbox-gl";
-import type { CentroidIds, Centroids, PolygonTiles } from "./whereTypes";
+import type { Centroids, PolygonTiles } from "./whereTypes";
 
 /** All features off by default; `fullMapOptions` and `compactGlobeOptions` are the presets. */
 export interface MapOptions {
@@ -35,12 +35,10 @@ export interface MapOptions {
     initialZoom?: number;
     initialCenter?: [number, number];
     markerSvg?: string;
-    /** Land GeoJSON endpoint: `?id=` / `?land=` for one with its names; `?bbox=` for the fills only when `polygonTiles` gives none. */
+    /** Land GeoJSON endpoint: `?pin=<build>/<n>` / `?land=` for one with its names; `?bbox=` for the fills only when `polygonTiles` gives none. */
     polygonsUrl?: string;
     /** The pins, started by the host before the map asks; with `loadMarkers`, drawn clustered. */
     centroids?: Promise<Centroids | null>;
-    /** The pins' polygon keys, in flight beside `centroids`; awaited on the first pin click, never before. */
-    centroidIds?: Promise<CentroidIds | null>;
     /** The fills as vector tiles; `null` or absent, they come from `?bbox=` (the key holder sees rows the tiles leave out); a rejection draws none, as a public `?bbox=` answers 410. */
     polygonTiles?: Promise<PolygonTiles | null>;
     loadMarkers?: boolean;
