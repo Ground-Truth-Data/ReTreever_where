@@ -274,8 +274,19 @@ let detailsHref = $derived(
 			: null,
 );
 
-let organizations: { name: string; whoKey: string | null }[] = $derived(selectedFeature?.organizations ?? []);
+let organizations: { name: string; whoKey: string | null; roles: string[] }[] = $derived(selectedFeature?.organizations ?? []);
 const orgHref = (whoKey: string | null) => (whoKey && routes.whoOrg ? localizeHref(routes.whoOrg(whoKey)) : null);
+// Keyed by StakeholderCategoryTable ids; a role with no word here shows no label.
+const ROLE_WORDS: Record<string, () => string> = {
+	developer_ish: m.wh_role_developer,
+	producer_ish: m.wh_role_producer,
+	landowner_ish: m.wh_role_landowner,
+	sponsor_ish: m.wh_role_sponsor,
+	marketplace_ish: m.wh_role_marketplace,
+	research_ish: m.wh_role_research,
+};
+const roleWords = (roles: string[]) =>
+	new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(roles.flatMap((r) => (ROLE_WORDS[r] ? [ROLE_WORDS[r]()] : [])));
 </script>
 
 <div class="where-stage">
@@ -565,8 +576,15 @@ const orgHref = (whoKey: string | null) => (whoKey && routes.whoOrg ? localizeHr
 					<div class="marker-row">
 						<dt>{organizations.length > 1 ? m.wh_row_organizations() : m.wh_row_organization()}</dt>
 						<dd class="marker-orgs">
-							<!-- One line: a newline here would put a space before each comma. -->
-							{#each organizations as org, i (i)}{#if i > 0}{", "}{/if}{#if orgHref(org.whoKey)}<a href={orgHref(org.whoKey)}>{org.name}</a>{:else}{org.name}{/if}{:else}{m.wh_org_none()}{/each}
+							{#each organizations as org, i (i)}
+								{@const role = roleWords(org.roles)}
+								<span class="marker-org">
+									{#if orgHref(org.whoKey)}<a href={orgHref(org.whoKey)}>{org.name}</a>{:else}{org.name}{/if}
+									{#if role}<span class="marker-org-role">{role}</span>{/if}
+								</span>
+							{:else}
+								{m.wh_org_none()}
+							{/each}
 						</dd>
 					</div>
 					{#if selectedFeature.projectName}
@@ -1308,10 +1326,24 @@ const orgHref = (whoKey: string | null) => (whoKey && routes.whoOrg ? localizeHr
 		word-break: break-all;
 	}
 
-	/* A list of names wraps between them; break-all would split a name mid-word. */
+	/* break-all would split a name mid-word. */
 	.marker-row dd.marker-orgs {
 		word-break: normal;
 		overflow-wrap: anywhere;
+	}
+
+	.marker-org {
+		display: block;
+	}
+
+	.marker-org + .marker-org {
+		margin-top: 0.2rem;
+	}
+
+	.marker-org-role {
+		color: var(--rt-fg-muted);
+		font-size: 0.9em;
+		margin-left: 0.35em;
 	}
 
 	.marker-row a {
