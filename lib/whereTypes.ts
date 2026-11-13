@@ -1,3 +1,5 @@
+import { getLocale } from "$parent/src/lib/paraglide/runtime";
+
 /** The pins as the host serves them: pin `i` sits at `lonlat[2i], lonlat[2i+1]`; `large[i]` is 0 small, 1 large, 2 past the render cap. A click asks the host for `<build>/<i>`: no key list reaches the browser. */
 export type Centroids = { build: string; lonlat: number[]; large: number[] };
 
@@ -26,8 +28,15 @@ export type WhereRoutes = {
 	whoOrg?: (key: string) => string;
 };
 
-/** 0–100 → "73.3%". Non-numeric → an em dash, never "NaN%". */
+/**
+ * A rating, which is out of 100 and never a percent: "73.3" (fr "73,3") or "—", never "NaN". The twin of
+ * ReTreever_who_what's `formatTransparencyScore` (a child cannot import another); ReTreever's `pageMeta.test.ts` pins
+ * the two equal.
+ */
 export function formatTransparencyScore(score: unknown): string {
 	const n = Number(score);
-	return Number.isFinite(n) ? `${n.toFixed(1)}%` : "—";
+	if (!Number.isFinite(n)) return "—";
+	// Rounded by toFixed first: Intl rounds a halfway hundredth the other way, and English must not move.
+	const oneDecimal = new Intl.NumberFormat(getLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false });
+	return oneDecimal.format(Number(n.toFixed(1)));
 }

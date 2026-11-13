@@ -556,11 +556,13 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 				</h2>
 				<p class="marker-rating">
 					{m.wh_transparency_rating_label()}
-					<span class="marker-score">
-						{selectedFeature.transparencyScore != null
-								? formatTransparencyScore(selectedFeature.transparencyScore)
-								: "—"}
-					</span>
+					{#if selectedFeature.transparencyScore != null}
+						{@const shown = formatTransparencyScore(selectedFeature.transparencyScore)}
+						<span class="marker-score" aria-hidden="true">{shown}<span class="out-of">/100</span></span>
+						<span class="sr-only">{m.wh_rating_out_of({ rating: shown })}</span>
+					{:else}
+						<span class="marker-score">—</span>
+					{/if}
 				</p>
 				<dl class="marker-rows">
 					{#if selectedFeature.landKey}
@@ -1298,6 +1300,24 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 	.marker-score {
 		font-size: clamp(1.5rem, 2.2vw, 2.1rem);
 		margin-left: 0.25em;
+		white-space: nowrap;
+	}
+
+	/* As on the rating page's hero: a share of 100, set small and lighter on the number's baseline. */
+	.out-of {
+		margin-left: 0.08em;
+		font-size: 0.5em;
+		opacity: 0.75;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 
 	.marker-rows {

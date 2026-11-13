@@ -42,6 +42,7 @@
 	"wh_details_close": "Close details",
 	"wh_marker_title": "{name}’s",
 	"wh_transparency_rating_label": "Transparency Rating:",
+	"wh_rating_out_of": "{rating} out of 100",
 	"wh_row_land": "Land:",
 	"wh_row_organization": "Organization:",
 	"wh_row_organizations": "Organizations:",
