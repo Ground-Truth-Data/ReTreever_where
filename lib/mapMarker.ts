@@ -392,7 +392,12 @@ async function addDogLayer(
         if (!isMapAlive(map)) return;
         if (!map.hasImage(iconId)) {
             map.addImage(iconId, still, { pixelRatio: 2 });
-            whenMapSettled(map, () => void wagWhenBaked(map, iconId, markerSvg, sizePx));
+            // A basemap switch drops the image but not the running wag; bake its frames once.
+            const bakeKey = `__iconBake:${iconId}`;
+            if (!mapRecord[bakeKey]) {
+                mapRecord[bakeKey] = true;
+                whenMapSettled(map, () => void wagWhenBaked(map, iconId, markerSvg, sizePx));
+            }
         }
     }
 

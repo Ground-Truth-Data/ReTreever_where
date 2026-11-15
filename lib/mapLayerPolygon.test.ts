@@ -15,13 +15,24 @@ type Handler = (...args: unknown[]) => void;
 function fakeMap() {
     const sources = new Map<string, Record<string, unknown>>();
     const layers = new Map<string, Record<string, unknown>>();
-    const handlers: [string, Handler][] = [];
+    const handlers: [string, Handler, string?][] = [];
+    const emit = (type: string) => {
+        for (const [t, h, layer] of handlers) if (t === type && !layer) h();
+    };
     const map = {
         sources,
         layers,
         handlers,
+        emit,
+        /** What `setStyle` does: the old style's sources and layers go, then the new style loads. */
+        switchBasemap() {
+            sources.clear();
+            layers.clear();
+            emit("styledataloading");
+            emit("style.load");
+        },
         on: (type: string, a: unknown, b?: unknown) => {
-            handlers.push([type, (b ?? a) as Handler]);
+            handlers.push(b ? [type, b as Handler, a as string] : [type, a as Handler]);
         },
         off: () => {},
         getZoom: () => 8,
@@ -265,5 +276,118 @@ describe("polygonTileRequests — the map's transformRequest, filled before the 
         const failed = polygonTileRequests(Promise.reject(new Error("index.json answered 404")));
         await expect(failed.polygonTiles).rejects.toThrow("index.json answered 404");
         expect(failed.transformRequest(tileAt, "Tile")).toEqual({ url: tileAt });
+    });
+});
+
+describe("addMarkersLayer — a basemap switch keeps the pins, fills and preview", () => {
+    const PIN_BUILD = "20261112T140543Z-8d6d4c6e";
+    const CENTROIDS = { build: PIN_BUILD, lonlat: [35, -6, 36, -7], large: [0, 1] };
+    const OUR_LAYERS = ["polygons-fill", "polygons-outline", "large-polygon-preview-fill", "large-polygon-preview-outline"];
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        vi.mocked(addClusteredPins).mockClear();
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const handlerCount = (map: ReturnType<typeof fakeMap>) => map.handlers.length;
+
+    it("re-adds them from memory on the next style.load, binds nothing twice, and fetches nothing", async () => {
+        fetchMock = vi.fn(async () => new Response("{}"));
+        vi.stubGlobal("fetch", fetchMock);
+        const map = fakeMap();
+        await addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: Promise.resolve(CENTROIDS),
+            polygonTiles: Promise.resolve({ ...TILES, build: PIN_BUILD, tileUrl: rewrite }),
+        });
+        await flush();
+        const tileSource = map.sources.get("polygons");
+        const handlers = handlerCount(map);
+        const firstPins = vi.mocked(addClusteredPins).mock.calls[0][1];
+
+        map.switchBasemap();
+        map.switchBasemap();
+
+        expect([...map.layers.keys()].sort()).toEqual([...OUR_LAYERS].sort());
+        expect(map.sources.get("polygons")).toEqual({ ...tileSource, setData: expect.any(Function) });
+        expect(map.sources.has("large-polygon-preview")).toBe(true);
+        const pinCalls = vi.mocked(addClusteredPins).mock.calls;
+        expect(pinCalls).toHaveLength(3);
+        expect(pinCalls[2][1].data).toBe(firstPins.data);
+        expect(pinCalls[2][1].onPointClick).toBe(firstPins.onPointClick);
+        expect(handlerCount(map)).toBe(handlers);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps the large land's preview drawn across the switch", async () => {
+        const large = {
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [[[35, -6], [36, -6], [36, -7], [35, -6]]] },
+            properties: { landKey: "l1", isLargePolygon: true },
+        };
+        vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(large))));
+        const map = fakeMap();
+        await addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: Promise.resolve(CENTROIDS),
+            polygonTiles: Promise.resolve({ ...TILES, build: PIN_BUILD, tileUrl: rewrite }),
+            onFeatureSelect: () => {},
+        });
+        const { onPointClick } = vi.mocked(addClusteredPins).mock.calls[0][1] as { onPointClick: (f: unknown) => void };
+        onPointClick({ geometry: { type: "Point", coordinates: [36, -7] }, properties: { pin: 1 } });
+        await flush();
+        await flush();
+
+        map.switchBasemap();
+
+        expect(map.sources.get("large-polygon-preview")?.data).toEqual({ type: "FeatureCollection", features: [large] });
+    });
+
+    it("re-adds the ?bbox= fills already loaded, without asking for their cells again", async () => {
+        const fill = { type: "Feature", id: 9, geometry: { type: "Point", coordinates: [30.5, -6.5] }, properties: {} };
+        fetchMock = vi.fn(async () => new Response(JSON.stringify({ features: [fill] })));
+        vi.stubGlobal("fetch", fetchMock);
+        const map = fakeMap();
+        await addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: Promise.resolve(null),
+        });
+        await new Promise((r) => setTimeout(r, 300));
+        await flush();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const handlers = handlerCount(map);
+
+        map.switchBasemap();
+        for (const [type, h, layer] of map.handlers) if (type === "moveend" && !layer) h();
+        await new Promise((r) => setTimeout(r, 300));
+        await flush();
+
+        expect(map.sources.get("polygons")?.data).toEqual({ type: "FeatureCollection", features: [fill] });
+        expect(map.layers.has("polygons-fill")).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(handlerCount(map)).toBe(handlers);
+    });
+
+    it("waits for the new style when the pins land mid-switch", async () => {
+        vi.stubGlobal("fetch", vi.fn());
+        let resolvePins!: (c: typeof CENTROIDS) => void;
+        const map = fakeMap();
+        const done = addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: new Promise((r) => (resolvePins = r)),
+            polygonTiles: Promise.resolve({ ...TILES, tileUrl: rewrite }),
+        });
+        await flush();
+
+        map.emit("styledataloading");
+        resolvePins(CENTROIDS);
+        await done;
+        expect(vi.mocked(addClusteredPins)).not.toHaveBeenCalled();
+        expect(map.sources.has("large-polygon-preview")).toBe(false);
+
+        map.emit("style.load");
+        expect(vi.mocked(addClusteredPins)).toHaveBeenCalledTimes(1);
+        expect(map.sources.has("large-polygon-preview")).toBe(true);
     });
 });

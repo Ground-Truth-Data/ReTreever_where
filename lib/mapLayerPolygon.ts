@@ -181,6 +181,15 @@ export async function addMarkersLayer(
         `${polygonsUrl}${polygonsUrl.includes("?") ? "&" : "?"}${q}`;
 
     let centroids: Centroids | null = null;
+    let pins: FeatureCollection<Point> | null = null;
+    // A basemap switch (`setStyle`) drops every source and layer; these rebuild them from memory.
+    let polygonSource: { spec: () => mapboxgl.AnySourceData; sourceLayer?: string; build?: string } | null = null;
+    let preview: FeatureCollection = emptyFC();
+    let previewReady = false;
+    let polygonClicksBound = false;
+    let fillWatched = false;
+    // Between `setStyle` and its `style.load` the style is half-built, and adding to it throws.
+    let styleReady = true;
     const loadedCells = new Set<string>();
     const polygonFeatures = new Map<string | number, Feature>();
     type CellBox = { c0: number; c1: number; r0: number; r1: number };
@@ -189,6 +198,11 @@ export async function addMarkersLayer(
 
     const previewSource = () =>
         map.getSource(PREVIEW_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+
+    function setPreview(fc: FeatureCollection): void {
+        preview = fc;
+        previewSource()?.setData(fc);
+    }
 
     /**
      * The drawer opens on the click at once and fills from `?pin=` — the one query a visitor waits
@@ -225,7 +239,7 @@ export async function addMarkersLayer(
             if (properties.isAbsoluteTooLarge) {
                 showLargePolygonPopup(map, center, hectares, true);
             } else if (properties.isLargePolygon && feature.geometry) {
-                previewSource()?.setData({
+                setPreview({
                     type: "FeatureCollection",
                     features: [feature as Feature<Polygon | MultiPolygon>],
                 });
@@ -241,7 +255,8 @@ export async function addMarkersLayer(
         build && typeof pin === "number" && Number.isInteger(pin) && pin >= 0 ? `${build}/${pin}` : null;
 
     function bindPolygonClicks(tilesBuild?: string): void {
-        if (options.compact) return;
+        if (options.compact || polygonClicksBound) return;
+        polygonClicksBound = true;
         map.on("click", "polygons-fill", (e) => {
             // A pin sits inside its own fill; its handler owns that click, or `?id=` is asked twice.
             const pinLayers = [`${PINS_ID}-dogs`, `${PINS_ID}-clusters`].filter((id) => map.getLayer(id));
@@ -310,22 +325,33 @@ export async function addMarkersLayer(
         return `${west},${south},${east},${north}`;
     }
 
+    function installPolygons(): void {
+        if (!polygonSource || !styleReady || map.getSource(POLYGONS_SOURCE)) return;
+        const { spec, sourceLayer, build } = polygonSource;
+        map.addSource(POLYGONS_SOURCE, spec());
+        addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", sourceLayer);
+        bindPolygonClicks(build);
+        if (!fillWatched) {
+            fillWatched = true;
+            markFirstFill(map, sourceLayer);
+        }
+    }
+
+    const polygonFC = (): FeatureCollection => ({
+        type: "FeatureCollection",
+        features: [...polygonFeatures.values()],
+    });
+
     function mergePolygons(features: Feature[]): void {
         for (const f of features) {
             if (f.geometry !== null && f.id != null) polygonFeatures.set(f.id, f);
         }
-        const polygonFC: FeatureCollection = {
-            type: "FeatureCollection",
-            features: [...polygonFeatures.values()],
-        };
         const existing = map.getSource(POLYGONS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
         if (existing) {
-            existing.setData(polygonFC);
+            existing.setData(polygonFC());
         } else {
-            map.addSource(POLYGONS_SOURCE, { type: "geojson", data: polygonFC });
-            addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline");
-            bindPolygonClicks();
-            markFirstFill(map);
+            polygonSource ??= { spec: () => ({ type: "geojson", data: polygonFC() }) };
+            installPolygons();
         }
     }
 
@@ -382,13 +408,43 @@ export async function addMarkersLayer(
     }
 
     function addPolygonTiles({ build, tiles, minzoom, maxzoom }: PolygonTiles): void {
-        if (map.getSource(POLYGONS_SOURCE)) return;
         // A z/x/y with no tile resolves to the one empty tile, an empty 200 that mapbox draws as nothing and never logs.
-        map.addSource(POLYGONS_SOURCE, { type: "vector", tiles: [tiles], minzoom, maxzoom });
-        addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", TILE_LAYER);
-        bindPolygonClicks(build);
-        markFirstFill(map, TILE_LAYER);
+        polygonSource = {
+            spec: () => ({ type: "vector", tiles: [tiles], minzoom, maxzoom }),
+            sourceLayer: TILE_LAYER,
+            build,
+        };
+        installPolygons();
     }
+
+    const onPointClick = (feature: mapboxgl.MapboxGeoJSONFeature) => {
+        const pin = pinRef(centroids?.build, feature.properties?.pin);
+        if (!pin) return;
+        const coordinates = (feature.geometry as Point).coordinates.slice() as [number, number];
+        void selectPolygon(pin, coordinates);
+    };
+
+    function installPins(): void {
+        if (!pins || !styleReady) return;
+        addClusteredPins(map, { id: PINS_ID, data: pins, markerSvg: options.markerSvg, onPointClick });
+    }
+
+    function installPreview(): void {
+        if (!previewReady || !styleReady || map.getSource(PREVIEW_SOURCE_ID)) return;
+        map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data: preview });
+        addPolygonLayers(map, PREVIEW_SOURCE_ID, PREVIEW_FILL_LAYER, PREVIEW_OUTLINE_LAYER);
+    }
+
+    map.on("styledataloading", () => {
+        styleReady = false;
+    });
+    // Pins first, so the fills and the preview go in under the cluster glow.
+    map.on("style.load", () => {
+        styleReady = true;
+        installPins();
+        installPolygons();
+        installPreview();
+    });
 
     // Not behind the pins: a deep link at fill zoom should not wait on the pins body.
     void Promise.resolve(options.polygonTiles).then(
@@ -406,27 +462,14 @@ export async function addMarkersLayer(
         console.error("Error loading land pins:", err);
     }
     if (!isMapAlive(map)) return;
-    const pins = pinsFromCentroids(centroids);
-
-    addClusteredPins(map, {
-        id: PINS_ID,
-        data: pins,
-        markerSvg: options.markerSvg,
-        onPointClick: (feature) => {
-            const pin = pinRef(centroids?.build, feature.properties?.pin);
-            if (!pin) return;
-            const coordinates = (feature.geometry as Point).coordinates.slice() as [number, number];
-            void selectPolygon(pin, coordinates);
-        },
-    });
+    pins = pinsFromCentroids(centroids);
+    installPins();
     if (typeof performance !== "undefined" && !performance.getEntriesByName(PINS_MARK).length) {
         performance.mark(PINS_MARK, { detail: { pins: pins.features.length } });
     }
 
-    if (!map.getSource(PREVIEW_SOURCE_ID)) {
-        map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data: emptyFC() });
-        addPolygonLayers(map, PREVIEW_SOURCE_ID, PREVIEW_FILL_LAYER, PREVIEW_OUTLINE_LAYER);
-    }
+    previewReady = true;
+    installPreview();
 
     // Only a click on empty canvas clears the preview; DOM and feature clicks leave it.
     const mapRecord = map as unknown as Record<string, unknown>;
@@ -444,7 +487,7 @@ export async function addMarkersLayer(
                     .length > 0
             )
                 return;
-            previewSource()?.setData(emptyFC());
+            setPreview(emptyFC());
         });
     }
 }
