@@ -21,6 +21,7 @@ import {
 } from "./whereTypes";
 
 import goldBorderRaw from "./whereAssets/gold-border.svg?raw";
+import { goldBorderPath } from "./goldBorder";
 import buttonPanelRaw from "./whereAssets/button-panel.svg?raw";
 import markerBoxRaw from "./whereAssets/marker-box.svg?raw";
 import aroundWindowRaw from "./whereAssets/around-me-window.svg?raw";
@@ -96,6 +97,8 @@ let aroundHintShown = $state(true);
 let favouritesOpen = $state(false);
 let areaQuery = $state("");
 let aroundMeStatus = $state("");
+let stageW = $state(0);
+let stageH = $state(0);
 
 let userLocation = $state<[number, number] | null>(null);
 
@@ -307,9 +310,17 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 		{initialFeatures}
 	/>
 
-	<div class="gold-border" aria-hidden="true">
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-		{@html goldBorderRaw}
+	<div class="gold-border" aria-hidden="true" bind:clientWidth={stageW} bind:clientHeight={stageH}>
+		<div class="gold-border-art">
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			{@html goldBorderRaw}
+		</div>
+		<!-- On a phone the panel is fixed px and the art's cutout a share of the width, so the outline is drawn in px. -->
+		{#if stageW && stageH}
+			<svg class="gold-border-phone" viewBox="0 0 {stageW} {stageH}">
+				<path d={goldBorderPath(stageW, stageH, true)} />
+			</svg>
+		{/if}
 	</div>
 
 		<div class="tool-panel">
@@ -631,10 +642,26 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 		pointer-events: none;
 	}
 
+	.gold-border-art,
 	.gold-border :global(svg) {
 		width: 100%;
 		height: 100%;
 		display: block;
+	}
+
+	/* Two classes: `.gold-border :global(svg)` above would otherwise show it on desktop too. */
+	.gold-border .gold-border-phone {
+		position: absolute;
+		inset: 0;
+		display: none;
+	}
+
+	.gold-border-phone path {
+		fill: none;
+		stroke: #f4de09;
+		stroke-width: 2.5;
+		stroke-linecap: round;
+		stroke-linejoin: round;
 	}
 
 	.where-stage :global(.mapboxgl-ctrl-top-left) {
@@ -1386,11 +1413,20 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 	}
 
 	@media (max-width: 767px) {
+		/* Kept equal to PHONE_PANEL in goldBorder.ts, which cuts the border around it. */
 		.tool-panel {
 			left: 4px;
 			top: 12%;
 			width: 54px;
 			height: 46%;
+		}
+
+		.gold-border .gold-border-art {
+			display: none;
+		}
+
+		.gold-border .gold-border-phone {
+			display: block;
 		}
 
 		/* Two thumb-sized buttons: the panel art stretches to fit them. */
