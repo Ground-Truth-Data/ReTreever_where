@@ -20,8 +20,7 @@ import {
 	type WhereRoutes,
 } from "./whereTypes";
 
-import goldBorderRaw from "./whereAssets/gold-border.svg?raw";
-import { goldBorderPath } from "./goldBorder";
+import { type Box, goldBorderPath, goldBorderStroke } from "./goldBorder";
 import buttonPanelRaw from "./whereAssets/button-panel.svg?raw";
 import markerBoxRaw from "./whereAssets/marker-box.svg?raw";
 import aroundWindowRaw from "./whereAssets/around-me-window.svg?raw";
@@ -97,8 +96,42 @@ let aroundHintShown = $state(true);
 let favouritesOpen = $state(false);
 let areaQuery = $state("");
 let aroundMeStatus = $state("");
+const PHONE = "(max-width: 767px)";
 let stageW = $state(0);
 let stageH = $state(0);
+let borderEl: HTMLDivElement | undefined = $state();
+let panelBox = $state<Box | null>(null);
+let cornerBox = $state<Box | null>(null);
+
+// The border's cutouts frame fixed-px things, so they are measured, and again whenever those things resize.
+$effect(() => {
+	const el = borderEl;
+	const stage = el?.parentElement;
+	if (!el || !stage || !map) return;
+	const phone = matchMedia(PHONE);
+	const within = (r: DOMRect, o: DOMRect): Box => ({ left: r.left - o.left, top: r.top - o.top, right: r.right - o.left, bottom: r.bottom - o.top });
+	const measure = () => {
+		const o = el.getBoundingClientRect();
+		const panel = stage.querySelector(".tool-panel");
+		panelBox = phone.matches && panel ? within(panel.getBoundingClientRect(), o) : null;
+		const parts = [...stage.querySelectorAll(".rt-zoom-readout, .mapboxgl-ctrl-logo")].map((e) => e.getBoundingClientRect()).filter((r) => r.width);
+		cornerBox = parts.length
+			? within(new DOMRect(Math.min(...parts.map((r) => r.left)), Math.min(...parts.map((r) => r.top)), 0, 0), o)
+			: null;
+	};
+	const ro = new ResizeObserver(measure);
+	ro.observe(el);
+	for (const sel of [".tool-panel", ".mapboxgl-ctrl-bottom-right"]) {
+		const target = stage.querySelector(sel);
+		if (target) ro.observe(target);
+	}
+	phone.addEventListener("change", measure);
+	measure();
+	return () => {
+		ro.disconnect();
+		phone.removeEventListener("change", measure);
+	};
+});
 
 let userLocation = $state<[number, number] | null>(null);
 
@@ -310,15 +343,13 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 		{initialFeatures}
 	/>
 
-	<div class="gold-border" aria-hidden="true" bind:clientWidth={stageW} bind:clientHeight={stageH}>
-		<div class="gold-border-art">
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			{@html goldBorderRaw}
-		</div>
-		<!-- On a phone the panel is fixed px and the art's cutout a share of the width, so the outline is drawn in px. -->
+	<div class="gold-border" aria-hidden="true" bind:this={borderEl} bind:clientWidth={stageW} bind:clientHeight={stageH}>
 		{#if stageW && stageH}
-			<svg class="gold-border-phone" viewBox="0 0 {stageW} {stageH}">
-				<path d={goldBorderPath(stageW, stageH, true)} />
+			<svg viewBox="0 0 {stageW} {stageH}">
+				<path
+					d={goldBorderPath(stageW, stageH, { panel: panelBox, corner: cornerBox })}
+					stroke-width={goldBorderStroke(stageW, stageH)}
+				/>
 			</svg>
 		{/if}
 	</div>
@@ -642,24 +673,15 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 		pointer-events: none;
 	}
 
-	.gold-border-art,
-	.gold-border :global(svg) {
+	.gold-border svg {
 		width: 100%;
 		height: 100%;
 		display: block;
 	}
 
-	/* Two classes: `.gold-border :global(svg)` above would otherwise show it on desktop too. */
-	.gold-border .gold-border-phone {
-		position: absolute;
-		inset: 0;
-		display: none;
-	}
-
-	.gold-border-phone path {
+	.gold-border path {
 		fill: none;
 		stroke: #f4de09;
-		stroke-width: 2.5;
 		stroke-linecap: round;
 		stroke-linejoin: round;
 	}
@@ -1413,20 +1435,12 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 	}
 
 	@media (max-width: 767px) {
-		/* Kept equal to PHONE_PANEL in goldBorder.ts, which cuts the border around it. */
+		/* A fixed px panel: the gold border measures it and cuts around it. Kept equal to PHONE in the script. */
 		.tool-panel {
 			left: 4px;
 			top: 12%;
 			width: 54px;
 			height: 46%;
-		}
-
-		.gold-border .gold-border-art {
-			display: none;
-		}
-
-		.gold-border .gold-border-phone {
-			display: block;
 		}
 
 		/* Two thumb-sized buttons: the panel art stretches to fit them. */
