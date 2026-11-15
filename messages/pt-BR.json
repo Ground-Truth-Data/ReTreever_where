@@ -55,7 +55,7 @@
 	"wh_row_project": "Projeto:",
 	"wh_row_hectares": "Hectares:",
 	"wh_org_none": "Nenhuma",
-	"wh_details_link": "Ver os detalhes da classificação e todos os dados",
+	"wh_details_link": "Como esta pontuação foi construída",
 	"wh_large_polygon_limit": "Limite:",
 	"wh_large_polygon_hectares_unknown": "desconhecido",
 	"wh_large_polygon_note": "O polígono excede o limite. Não são dados de restauração significativos.",

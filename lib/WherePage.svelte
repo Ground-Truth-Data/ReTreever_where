@@ -314,6 +314,9 @@ let detailsHref = $derived(
 );
 
 let organizations: { name: string; whoKey: string | null; roles: string[] }[] = $derived(selectedFeature?.organizations ?? []);
+let scoreHref = $derived(
+	selectedFeature?.projectKey && routes.whatProjectScore ? localizeHref(routes.whatProjectScore(selectedFeature.projectKey)) : detailsHref,
+);
 const orgHref = (whoKey: string | null) => (whoKey && routes.whoOrg ? localizeHref(routes.whoOrg(whoKey)) : null);
 // The land's own page: the link to share, and the one a reload reopens.
 let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}/${selectedFeature.landSegment}`) : detailsHref);
@@ -644,7 +647,7 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 						</div>
 					{/if}
 				</dl>
-				<a class="marker-details-link" href={detailsHref}>
+				<a class="marker-details-link" href={scoreHref}>
 					{m.wh_details_link()}
 				</a>
 				{/if}

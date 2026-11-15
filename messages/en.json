@@ -55,7 +55,7 @@
 	"wh_row_project": "Project:",
 	"wh_row_hectares": "Hectares:",
 	"wh_org_none": "None",
-	"wh_details_link": "View score details and all data",
+	"wh_details_link": "How this score was built",
 	"wh_large_polygon_limit": "Limit:",
 	"wh_large_polygon_hectares_unknown": "unknown",
 	"wh_large_polygon_note": "Polygon exceeds limit. Not meaningful restoration data.",

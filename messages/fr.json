@@ -55,7 +55,7 @@
 	"wh_row_project": "Projet :",
 	"wh_row_hectares": "Hectares :",
 	"wh_org_none": "Aucune",
-	"wh_details_link": "Voir le détail de la note et toutes les données",
+	"wh_details_link": "Comment ce score a été construit",
 	"wh_large_polygon_limit": "Limite :",
 	"wh_large_polygon_hectares_unknown": "inconnu",
 	"wh_large_polygon_note": "Le polygone dépasse la limite. Ce ne sont pas des données de restauration pertinentes.",

@@ -26,6 +26,8 @@ export type WhereRoutes = {
 	what?: string;
 	whatProject?: (key: string) => string;
 	whoOrg?: (key: string) => string;
+	/** How a project's published score was built: the drawer's details link. Absent → the project's page. */
+	whatProjectScore?: (key: string) => string;
 };
 
 /**
