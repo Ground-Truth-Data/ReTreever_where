@@ -464,7 +464,8 @@ export function initializeMap(
         });
     }
 
-    map.on("load", () => {
+    // Once: `style.load` fires again on every basemap swap. Nothing here needs `load`'s first tiles.
+    map.once("style.load", () => {
         map.resize();
         if (opts.autoRotate) startRotation(map, opts, userInteractingRef);
         opts.onMapReady?.(map);
