@@ -138,12 +138,19 @@ function addLandcover(map: mapboxgl.Map): void {
     }
 }
 
+const styleSwappedAway = (map: mapboxgl.Map) => !map.getSource("natural-terrain");
+
 const TERRAIN_MIN_ZOOM = 9;
 
 function setupLazyTerrain(map: mapboxgl.Map): void {
     let added = false;
 
     function onIdle() {
+        // A swap to a plain basemap (often a diff, with no `styledataloading`) drops the source; this listener retires.
+        if (styleSwappedAway(map)) {
+            map.off("idle", onIdle);
+            return;
+        }
         if (added) return;
         if (map.getZoom() < TERRAIN_MIN_ZOOM) return;
 
@@ -208,6 +215,10 @@ function setupLazySatellite(map: mapboxgl.Map): void {
     let added = false;
 
     function onIdle() {
+        if (styleSwappedAway(map)) {
+            map.off("idle", onIdle);
+            return;
+        }
         if (added) return;
         if (map.getZoom() < SAT_MIN_ZOOM) return;
 
