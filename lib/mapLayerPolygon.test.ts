@@ -42,6 +42,12 @@ function fakeMap() {
             sources.set(id, { ...spec, setData: vi.fn() });
         },
         getLayer: (id: string) => layers.get(id),
+        removeLayer: (id: string) => {
+            layers.delete(id);
+        },
+        removeSource: (id: string) => {
+            sources.delete(id);
+        },
         addLayer: (spec: Record<string, unknown>) => {
             layers.set(spec.id as string, spec);
         },
@@ -183,6 +189,139 @@ describe("addMarkersLayer — a click asks for a pin by its number, never by a k
         expect(selected.map((s) => ("failed" in s ? "failed" : "loading" in s ? "loading" : "other"))).toEqual(["loading", "failed"]);
         expect(error).not.toHaveBeenCalled();
         error.mockRestore();
+    });
+});
+
+describe("addMarkersLayer — a page holding a build the store pruned takes the live one", () => {
+    const HELD = "20261112T140543Z-8d6d4c6e";
+    const LIVE = "20261119T054546Z-b81be8f6";
+    const SINCE = "20261115T101010Z-0a0a0a0a";
+    const answer = { type: "Feature", geometry: null, properties: { landKey: "l1", landName: "A land" } };
+    const pinUrl = (build: string, n: number) => `/api/where/polygons?pin=${encodeURIComponent(`${build}/${n}`)}`;
+    // The live build numbers the same two places the other way round, and adds one.
+    const LIVE_PINS = { build: LIVE, lonlat: [36, -7, 35, -6, 40, 1], large: [1, 0, 0] };
+    const LIVE_INDEX = { build: LIVE, since: [SINCE, LIVE], tiles: { "9/306/263": 0, "9/307/263": 1 } };
+    const tileAt = `${ROOT}/polygons/9/306/263.pbf`;
+    let fetchMock: ReturnType<typeof vi.fn>;
+    let answers: Record<string, () => Response>;
+
+    beforeEach(() => {
+        answers = {
+            [`${ROOT}/builds/latest.json`]: () => Response.json({ build: LIVE, minzoom: 6, maxzoom: 11, pins: 3 }),
+            [`${ROOT}/builds/${LIVE}/pins.json`]: () => Response.json(LIVE_PINS),
+            [`${ROOT}/builds/${LIVE}/index.json`]: () => Response.json(LIVE_INDEX),
+            [pinUrl(LIVE, 0)]: () => Response.json(answer),
+            [pinUrl(LIVE, 1)]: () => Response.json(answer),
+        };
+        // Any pin of the held build: the store no longer has its list.
+        fetchMock = vi.fn(async (url: string) => answers[String(url)]?.() ?? new Response(null, { status: String(url).includes(encodeURIComponent(HELD)) ? 204 : 404 }));
+        vi.stubGlobal("fetch", fetchMock);
+        vi.mocked(addClusteredPins).mockClear();
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const asked = () => fetchMock.mock.calls.map(([u]) => String(u));
+    const states = (selected: Record<string, unknown>[]) =>
+        selected.map((s) => ("failed" in s ? "failed" : "loading" in s ? "loading" : "land"));
+
+    async function stalePage(fillProps: Record<string, unknown> | null = null) {
+        const selected: Record<string, unknown>[] = [];
+        const map = { ...fakeMap(), queryRenderedFeatures: () => (fillProps ? [{ properties: fillProps }] : []) };
+        const { polygonTiles, transformRequest } = polygonTileRequests(Promise.resolve({ ...TILES, build: HELD, tileUrl: rewrite }));
+        await addMarkersLayer(map as never, {
+            polygonsUrl: "/api/where/polygons",
+            centroids: Promise.resolve({ build: HELD, lonlat: [35, -6, 36, -7], large: [0, 1] }),
+            polygonTiles,
+            onFeatureSelect: (f) => selected.push(f as Record<string, unknown>),
+        });
+        await flush();
+        const clickPin = (n: number, at: [number, number]) => {
+            const { onPointClick } = vi.mocked(addClusteredPins).mock.calls.at(-1)?.[1] as { onPointClick: (f: unknown) => void };
+            onPointClick({ geometry: { type: "Point", coordinates: at }, properties: { pin: n } });
+        };
+        const fillClick = map.handlers.find(([type, , layer]) => type === "click" && layer === "polygons-fill")?.[1];
+        return { map, selected, transformRequest, clickPin, fillClick };
+    }
+    const settle = async () => {
+        for (let i = 0; i < 8; i++) await flush();
+    };
+
+    it("a pin click reads the live build once, swaps the pins and the tiles, and asks again for the pin at that place", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const { map, selected, transformRequest, clickPin } = await stalePage();
+        const handlers = map.handlers.length;
+        clickPin(1, [36, -7]);
+        await settle();
+
+        expect(asked()).toEqual([
+            pinUrl(HELD, 1),
+            `${ROOT}/builds/latest.json`,
+            `${ROOT}/builds/${LIVE}/pins.json`,
+            `${ROOT}/builds/${LIVE}/index.json`,
+            pinUrl(LIVE, 0),
+        ]);
+        expect(states(selected)).toEqual(["loading", "land"]);
+        expect(selected.at(-1)).toEqual(answer.properties);
+        expect(vi.mocked(addClusteredPins).mock.calls.at(-1)?.[1].data.features.map((f) => f.geometry.coordinates)).toEqual([[36, -7], [35, -6], [40, 1]]);
+        const { setData: _, ...source } = map.sources.get("polygons") ?? {};
+        expect(source).toEqual({ type: "vector", tiles: [TEMPLATE], minzoom: 6, maxzoom: 11 });
+        expect(map.layers.has("polygons-fill")).toBe(true);
+        expect(transformRequest(tileAt, "Tile").url).toBe(`${ROOT}/polygons/9/306/263/${SINCE}.pbf`);
+        expect(transformRequest(`${ROOT}/polygons/9/1/1.pbf`, "Tile").url).toBe(`${ROOT}/polygons/empty.pbf`);
+        expect(map.handlers.length).toBe(handlers);
+        expect(error).not.toHaveBeenCalled();
+
+        // Recovered: the next click is one request, in the live build.
+        fetchMock.mockClear();
+        clickPin(1, [35, -6]);
+        await settle();
+        expect(asked()).toEqual([pinUrl(LIVE, 1)]);
+        error.mockRestore();
+    });
+
+    it("a fill click recovers through its pin's place in the held build", async () => {
+        const { selected, fillClick } = await stalePage({ pin: 0 });
+        fillClick?.({ point: { x: 1, y: 1 }, lngLat: { toArray: () => [35.01, -6.01] } });
+        await settle();
+        expect(asked().at(0)).toBe(pinUrl(HELD, 0));
+        expect(asked().at(-1)).toBe(pinUrl(LIVE, 1));
+        expect(asked()).toHaveLength(5);
+        expect(states(selected)).toEqual(["loading", "land"]);
+
+        // The next fill click names the live build, which the tiles now are.
+        fetchMock.mockClear();
+        fillClick?.({ point: { x: 1, y: 1 }, lngLat: { toArray: () => [35.01, -6.01] } });
+        await settle();
+        expect(asked()).toEqual([pinUrl(LIVE, 0)]);
+    });
+
+    it.each([
+        ["the live build is gone too", () => (answers[pinUrl(LIVE, 0)] = () => new Response(null, { status: 204 })), 5],
+        ["the store names the build the page already holds", () => (answers[`${ROOT}/builds/latest.json`] = () => Response.json({ build: HELD, minzoom: 7, maxzoom: 12, pins: 2 })), 2],
+        ["the live build's pins do not read", () => (answers[`${ROOT}/builds/${LIVE}/pins.json`] = () => new Response("No such object.", { status: 404 })), 4],
+        ["the live build has no pin at that place", () => (answers[`${ROOT}/builds/${LIVE}/pins.json`] = () => Response.json({ ...LIVE_PINS, lonlat: [1, 1, 35, -6, 40, 1] })), 4],
+    ])("fails in the drawer once, with no further request, when %s", async (_, arrange, requests) => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        arrange();
+        const { selected, clickPin } = await stalePage();
+        clickPin(1, [36, -7]);
+        await settle();
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(states(selected)).toEqual(["loading", "failed"]);
+        expect(asked()).toHaveLength(requests);
+        expect(error).toHaveBeenCalledTimes(1);
+        error.mockRestore();
+    });
+
+    it("two clicks while the live build is being read share that one read", async () => {
+        const { selected, clickPin } = await stalePage();
+        clickPin(1, [36, -7]);
+        clickPin(0, [35, -6]);
+        await settle();
+        expect(asked().filter((u) => u.endsWith("latest.json"))).toHaveLength(1);
+        expect(asked()).toHaveLength(7);
+        expect(states(selected).filter((s) => s === "land")).toHaveLength(2);
     });
 });
 

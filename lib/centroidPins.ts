@@ -30,3 +30,23 @@ export function pinsFromCentroids(
     }
     return { type: "FeatureCollection", features };
 }
+
+// Positions are rounded to 5 places at build time; this absorbs the float noise of that rounding, no more.
+const SAME_PLACE_DEG = 1.5e-5;
+
+/** The number `c` gives the pin at `[lon, lat]`, or null: a pin's number changes between builds, its place does not. */
+export function pinAt(c: Centroids, lon: number, lat: number): number | null {
+    const n = Math.min(c.large.length, c.lonlat.length >> 1);
+    let best: number | null = null;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < n; i++) {
+        const dLon = Math.abs(c.lonlat[2 * i] - lon);
+        const dLat = Math.abs(c.lonlat[2 * i + 1] - lat);
+        if (dLon > SAME_PLACE_DEG || dLat > SAME_PLACE_DEG) continue;
+        if (dLon + dLat < bestD) {
+            best = i;
+            bestD = dLon + dLat;
+        }
+    }
+    return best;
+}

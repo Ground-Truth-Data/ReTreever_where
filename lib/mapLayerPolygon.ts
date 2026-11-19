@@ -10,7 +10,7 @@ import type * as mapboxgl from "mapbox-gl";
 import mapboxglRuntime from "mapbox-gl";
 import { m } from "$parent/src/lib/paraglide/messages";
 import { getLocale } from "$parent/src/lib/paraglide/runtime";
-import { pinsFromCentroids } from "./centroidPins";
+import { pinAt, pinsFromCentroids } from "./centroidPins";
 import { featureCoord } from "./coord";
 import { MAP_CONFIG } from "./MAP_CONFIG";
 import { addClusteredPins, isMapAlive } from "./mapMarker";
@@ -140,6 +140,56 @@ function markFirstFill(map: mapboxgl.Map, sourceLayer?: string): void {
 
 type TransformRequest = NonNullable<MapOptions["transformRequest"]>;
 
+// The map's `transformRequest` is fixed at construction; this is how a page that takes a newer build repoints it.
+const tileUrlSetters = new WeakMap<PolygonTiles, (tileUrl: PolygonTiles["tileUrl"]) => void>();
+
+const TEMPLATE_TAIL = "/polygons/{z}/{x}/{y}.pbf";
+const BUILD_ID = /^\d{8}T\d{6}Z-[0-9a-f]{8}$/;
+
+async function readJson(url: string): Promise<Record<string, unknown> | null> {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const body: unknown = await res.json();
+    return body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+}
+
+/**
+ * The store's live build, read from beside the tiles the page holds: its pins and its fills, or null when the
+ * page already holds it or any file of it does not read. The layout under `builds/` is the host's
+ * (`latest.json` naming the build; `pins.json` and `index.json` under it, the index giving each `z/x/y` the
+ * build that last changed its tile).
+ */
+async function readLiveBuild(held: PolygonTiles): Promise<{ centroids: Centroids; tiles: PolygonTiles } | null> {
+    if (!held.tiles.endsWith(TEMPLATE_TAIL)) return null;
+    const root = held.tiles.slice(0, -TEMPLATE_TAIL.length);
+    const latest = await readJson(`${root}/builds/latest.json`);
+    const build = latest?.build;
+    if (typeof build !== "string" || !BUILD_ID.test(build) || build === held.build) return null;
+    const { minzoom, maxzoom } = latest as { minzoom?: unknown; maxzoom?: unknown };
+    if (typeof minzoom !== "number" || typeof maxzoom !== "number") return null;
+    const [pins, index] = await Promise.all([
+        readJson(`${root}/builds/${build}/pins.json`),
+        readJson(`${root}/builds/${build}/index.json`),
+    ]);
+    if (pins?.build !== build || !Array.isArray(pins.lonlat) || !Array.isArray(pins.large)) return null;
+    const since = index?.since;
+    const tiles = index?.tiles as Record<string, number> | null | undefined;
+    if (index?.build !== build || !Array.isArray(since) || !since.every((b) => typeof b === "string" && BUILD_ID.test(b))) return null;
+    if (!tiles || typeof tiles !== "object") return null;
+    const prefix = `${root}/polygons/`;
+    const tileUrl = (url: string) => {
+        if (!url.startsWith(prefix)) return url;
+        const key = /^(\d+\/\d+\/\d+)\.pbf$/.exec(url.slice(prefix.length))?.[1];
+        if (!key) return url;
+        const from = since[tiles[key]] as string | undefined;
+        return from ? `${prefix}${key}/${from}.pbf` : `${prefix}empty.pbf`;
+    };
+    return {
+        centroids: pins as unknown as Centroids,
+        tiles: { build, tiles: held.tiles, minzoom, maxzoom, tileUrl },
+    };
+}
+
 /**
  * Mapbox reads `transformRequest` only at construction, so the map is born with this one, which rewrites
  * `Tile` URLs once the tiles resolve. The returned `polygonTiles` settles only after that, so a source added
@@ -152,6 +202,7 @@ export function polygonTileRequests(
     let tileUrl: ((url: string) => string) | undefined;
     const ready = polygonTiles.then((tiles) => {
         tileUrl = tiles?.tileUrl;
+        if (tiles) tileUrlSetters.set(tiles, (next) => (tileUrl = next));
         return tiles;
     });
     // The map still receives the rejection; this only keeps a map without markers from logging it unhandled.
@@ -169,7 +220,8 @@ export function polygonTileRequests(
  * Land as clustered pins from the host's centroids arrays, plus the small polygons' fills from
  * `polygonTiles` (or, without them, geometry fetched by `?bbox=` once the camera nears
  * `POLYGON_STYLE.minZoom`). A pin and a fill carry only their number in a build: a click asks
- * `?pin=<build>/<n>`, and the host resolves it.
+ * `?pin=<build>/<n>`, and the host resolves it. When the host no longer holds that build (an empty 204),
+ * the page takes the live build's pins and tiles and asks once more, for the pin at the same place.
  */
 export async function addMarkersLayer(
     map: mapboxgl.Map,
@@ -183,7 +235,10 @@ export async function addMarkersLayer(
     let centroids: Centroids | null = null;
     let pins: FeatureCollection<Point> | null = null;
     // A basemap switch (`setStyle`) drops every source and layer; these rebuild them from memory.
-    let polygonSource: { spec: () => mapboxgl.AnySourceData; sourceLayer?: string; build?: string } | null = null;
+    let polygonSource: { spec: () => mapboxgl.AnySourceData; sourceLayer?: string; tiles?: PolygonTiles } | null = null;
+    /** The tiles object the map was born with: `tileUrlSetters` knows it by identity. */
+    let firstTiles: PolygonTiles | null = null;
+    let takingLive: Promise<boolean> | null = null;
     let preview: FeatureCollection = emptyFC();
     let previewReady = false;
     let polygonClicksBound = false;
@@ -204,27 +259,75 @@ export async function addMarkersLayer(
         previewSource()?.setData(fc);
     }
 
+    const ask = (pin: string) => fetch(withQuery(`pin=${encodeURIComponent(pin)}`));
+
+    /** Swaps the pins and the fills to the store's live build; false when there is none newer to take. */
+    function takeLiveBuild(): Promise<boolean> {
+        takingLive ??= (async () => {
+            const held = polygonSource?.tiles;
+            const live = held ? await readLiveBuild(held) : null;
+            if (!live || !isMapAlive(map)) return false;
+            centroids = live.centroids;
+            pins = pinsFromCentroids(centroids);
+            installPins();
+            if (firstTiles) tileUrlSetters.get(firstTiles)?.(live.tiles.tileUrl);
+            // A new source, not a reload: the template is the same, and only a new source drops the old build's tiles.
+            if (styleReady && map.getSource(POLYGONS_SOURCE)) {
+                for (const id of ["polygons-fill", "polygons-outline"]) if (map.getLayer(id)) map.removeLayer(id);
+                map.removeSource(POLYGONS_SOURCE);
+            }
+            addPolygonTiles(live.tiles);
+            return true;
+        })()
+            .catch((err) => {
+                console.error("Failed to read the live build:", err);
+                return false;
+            })
+            .finally(() => {
+                takingLive = null;
+            });
+        return takingLive;
+    }
+
     /**
      * The drawer opens on the click at once and fills from `?pin=` — the one query a visitor waits
      * for. A large polygon's geometry comes in the same answer and draws as the preview. With no
      * pin to ask for (a tile from before pins were numbered), the drawer says so and asks nothing.
      */
     async function selectPolygon(
-        pin: string | null,
+        build: string | undefined,
+        n: unknown,
         center: [number, number],
     ): Promise<void> {
         if (options.compact) return;
         safeEase(map, { center, zoom: MAP_CONFIG.cluster.clickZoom });
         const centroid = { type: "Point", coordinates: center };
         options.onFeatureSelect?.({ centroid, loading: true });
+        const pin = pinRef(build, n);
+        // Read now: a recovery replaces `centroids`, and the place is all that names this pin in the next build.
+        const heldPins = centroids;
+        const at = pin && heldPins && heldPins.build === build ? heldPins.lonlat.slice(2 * (n as number), 2 * (n as number) + 2) : [];
         try {
             if (!pin) {
                 options.onFeatureSelect?.({ centroid, failed: true });
                 return;
             }
-            const response = await fetch(withQuery(`pin=${encodeURIComponent(pin)}`));
+            let response = await ask(pin);
             if (!isMapAlive(map)) return;
-            if (!response.ok) {
+            if (response.status === 204) {
+                // Once per click: the second answer stands, whatever it is.
+                const moved = centroids?.build !== build || (await takeLiveBuild());
+                if (!isMapAlive(map)) return;
+                const again = moved && centroids && at.length === 2 ? pinRef(centroids.build, pinAt(centroids, at[0], at[1])) : null;
+                if (!again) {
+                    console.error("Failed to fetch polygon: its build is gone, and no live build has a pin there");
+                    options.onFeatureSelect?.({ centroid, failed: true });
+                    return;
+                }
+                response = await ask(again);
+                if (!isMapAlive(map)) return;
+            }
+            if (!response.ok || response.status === 204) {
                 console.error("Failed to fetch polygon:", response.status);
                 options.onFeatureSelect?.({ centroid, failed: true });
                 return;
@@ -254,7 +357,7 @@ export async function addMarkersLayer(
     const pinRef = (build: string | undefined, pin: unknown) =>
         build && typeof pin === "number" && Number.isInteger(pin) && pin >= 0 ? `${build}/${pin}` : null;
 
-    function bindPolygonClicks(tilesBuild?: string): void {
+    function bindPolygonClicks(): void {
         if (options.compact || polygonClicksBound) return;
         polygonClicksBound = true;
         map.on("click", "polygons-fill", (e) => {
@@ -266,7 +369,7 @@ export async function addMarkersLayer(
             })[0]?.properties;
             if (!properties) return;
             const center = featureCoord(properties) ?? (e.lngLat.toArray() as [number, number]);
-            void selectPolygon(pinRef(tilesBuild, properties.pin), [center[0], center[1]]);
+            void selectPolygon(polygonSource?.tiles?.build, properties.pin, [center[0], center[1]]);
         });
         map.on("mouseenter", "polygons-fill", () => {
             map.getCanvas().style.cursor = "pointer";
@@ -327,10 +430,10 @@ export async function addMarkersLayer(
 
     function installPolygons(): void {
         if (!polygonSource || !styleReady || map.getSource(POLYGONS_SOURCE)) return;
-        const { spec, sourceLayer, build } = polygonSource;
+        const { spec, sourceLayer } = polygonSource;
         map.addSource(POLYGONS_SOURCE, spec());
         addPolygonLayers(map, POLYGONS_SOURCE, "polygons-fill", "polygons-outline", sourceLayer);
-        bindPolygonClicks(build);
+        bindPolygonClicks();
         if (!fillWatched) {
             fillWatched = true;
             markFirstFill(map, sourceLayer);
@@ -407,21 +510,23 @@ export async function addMarkersLayer(
         maybeLoadView();
     }
 
-    function addPolygonTiles({ build, tiles, minzoom, maxzoom }: PolygonTiles): void {
+    function addPolygonTiles(polygonTiles: PolygonTiles): void {
+        const { tiles, minzoom, maxzoom } = polygonTiles;
+        firstTiles ??= polygonTiles;
         // A z/x/y with no tile resolves to the one empty tile, an empty 200 that mapbox draws as nothing and never logs.
         polygonSource = {
             spec: () => ({ type: "vector", tiles: [tiles], minzoom, maxzoom }),
             sourceLayer: TILE_LAYER,
-            build,
+            tiles: polygonTiles,
         };
         installPolygons();
     }
 
     const onPointClick = (feature: mapboxgl.MapboxGeoJSONFeature) => {
-        const pin = pinRef(centroids?.build, feature.properties?.pin);
-        if (!pin) return;
+        const build = centroids?.build;
+        if (!pinRef(build, feature.properties?.pin)) return;
         const coordinates = (feature.geometry as Point).coordinates.slice() as [number, number];
-        void selectPolygon(pin, coordinates);
+        void selectPolygon(build, feature.properties?.pin, coordinates);
     };
 
     function installPins(): void {
