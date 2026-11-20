@@ -1,7 +1,7 @@
 import type * as mapboxgl from "mapbox-gl";
 import type { Centroids, PolygonTiles } from "./whereTypes";
 
-/** All features off by default; `fullMapOptions` and `compactGlobeOptions` are the presets. */
+/** All features off by default; `fullMapOptions` is the preset. */
 export interface MapOptions {
     showNavigation?: boolean;
     /** Defaults to `showNavigation`. */

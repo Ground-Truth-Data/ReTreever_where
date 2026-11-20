@@ -96,11 +96,3 @@ export const fullMapOptions: MapOptions = {
     initialCenter: [38.32379156163088, -4.920169086710128],
     style: MAP_CONFIG.styles.defaultSat,
 };
-
-export const compactGlobeOptions: MapOptions = {
-    hideLabels: true,
-    globeProjection: true,
-    autoRotate: true,
-    rotationSpeed: 1.5,
-    style: MAP_CONFIG.styles.defaultDark,
-};

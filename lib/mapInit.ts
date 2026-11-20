@@ -2,7 +2,6 @@ import mapboxgl from "mapbox-gl";
 import "./mapboxWorker";
 import { m } from "$parent/src/lib/paraglide/messages";
 import {
-    compactGlobeOptions,
     defaultOptions,
     fullMapOptions,
     MAP_CONFIG,
@@ -490,5 +489,5 @@ export function defaultStyleUrl(): string | null {
     return `https://api.mapbox.com/styles/v1/${path}?sdk=js-${mapboxgl.version}&access_token=${token}`;
 }
 
-export { fullMapOptions, compactGlobeOptions };
+export { fullMapOptions };
 export type { MapOptions, PolygonConfig } from "./mapTypes";
