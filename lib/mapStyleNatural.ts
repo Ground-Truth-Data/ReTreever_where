@@ -1,10 +1,11 @@
 // Natural Dark: runtime overrides on Mapbox dark-v11. Raster sources (DEM,
 // satellite) are gated behind minzoom so they never fetch at globe scale.
 import type * as mapboxgl from "mapbox-gl";
+import { MAP_LAND, MAP_OCEAN, MAP_SPACE } from "./mapColours";
 
 const P = {
-    land: "#2f5a32", // lighter so gold pins pop
-    ocean: "#0d2038",
+    land: MAP_LAND, // lighter so gold pins pop
+    ocean: MAP_OCEAN,
     waterway: "rgba(13, 40, 80, 0.7)",
     lc: {
         wood: "rgba(22, 62, 28, 0.55)",
@@ -28,7 +29,7 @@ export const NATURAL_FOG: mapboxgl.FogSpecification = {
     color: "rgba(12, 30, 22, 0.28)",
     "high-color": "rgba(8, 20, 55, 0.22)",
     "horizon-blend": 0.02,
-    "space-color": "rgb(8, 10, 20)",
+    "space-color": MAP_SPACE,
     "star-intensity": 0.5,
 };
 
