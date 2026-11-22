@@ -1385,6 +1385,11 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 			height: 88px;
 		}
 
+		/* The drawer is see-through and covers the same corner; a phone pinches instead. */
+		.where-stage:has(.marker-box) .zoom-panel {
+			display: none;
+		}
+
 		.where-stage {
 			--around-right: 10px;
 			--around-bottom: 14%;
