@@ -35,7 +35,7 @@ export interface MapOptions {
     initialZoom?: number;
     initialCenter?: [number, number];
     markerSvg?: string;
-    /** Land GeoJSON endpoint: `?pin=<build>/<n>` / `?land=` for one with its names; `?bbox=` for the fills only when `polygonTiles` gives none. */
+    /** Land GeoJSON endpoint: `?pin=<build>/<n>` / `?land=` for one with its names. */
     polygonsUrl?: string;
     /** The pins, started by the host before the map asks; with `loadMarkers`, drawn clustered. */
     centroids?: Promise<Centroids | null>;

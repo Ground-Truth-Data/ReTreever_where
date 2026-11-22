@@ -32,13 +32,6 @@ const PREVIEW_SOURCE_ID = "large-polygon-preview";
 const PREVIEW_FILL_LAYER = "large-polygon-preview-fill";
 const PREVIEW_OUTLINE_LAYER = "large-polygon-preview-outline";
 
-// Requests snap to this grid, so a repeat view asks for the same URL and the CDN can answer it.
-const CELL_DEG = 1;
-const COLS = 360 / CELL_DEG;
-const ROWS = 180 / CELL_DEG;
-// Fraction of the view loaded beyond each edge, so a short pan doesn't pop.
-const VIEW_PAD = 0.15;
-
 // Mirrors the API's thresholds, for the popup only.
 const LARGE_POLYGON_HA = 1_000;
 const ABSOLUTE_CAP_HA = 50_000;
@@ -218,8 +211,7 @@ export function polygonTileRequests(
 
 /**
  * Land as clustered pins from the host's centroids arrays, plus the small polygons' fills from
- * `polygonTiles` (or, without them, geometry fetched by `?bbox=` once the camera nears
- * `POLYGON_STYLE.minZoom`). A pin and a fill carry only their number in a build: a click asks
+ * `polygonTiles`. A pin and a fill carry only their number in a build: a click asks
  * `?pin=<build>/<n>`, and the host resolves it. When the host no longer holds that build (an empty 204),
  * the page takes the live build's pins and tiles and asks once more, for the pin at the same place.
  */
@@ -245,11 +237,6 @@ export async function addMarkersLayer(
     let fillWatched = false;
     // Between `setStyle` and its `style.load` the style is half-built, and adding to it throws.
     let styleReady = true;
-    const loadedCells = new Set<string>();
-    const polygonFeatures = new Map<string | number, Feature>();
-    type CellBox = { c0: number; c1: number; r0: number; r1: number };
-    let inflight: { controller: AbortController; box: CellBox } | null = null;
-    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
     const previewSource = () =>
         map.getSource(PREVIEW_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
@@ -379,55 +366,6 @@ export async function addMarkersLayer(
         });
     }
 
-    /** The smallest grid-aligned box holding every unloaded cell of the padded view. */
-    function missingCells(): CellBox | null {
-        const bounds = map.getBounds();
-        if (!bounds) return null;
-        const west = bounds.getWest();
-        const east = bounds.getEast();
-        const south = bounds.getSouth();
-        const north = bounds.getNorth();
-        const padX = (east - west) * VIEW_PAD;
-        const padY = (north - south) * VIEW_PAD;
-        // Columns stay unwrapped (may run past ±180) so a view across the antimeridian is one range.
-        let c0 = Math.floor((west - padX + 180) / CELL_DEG);
-        let c1 = Math.floor((east + padX + 180) / CELL_DEG);
-        if (c1 - c0 + 1 >= COLS) [c0, c1] = [0, COLS - 1];
-        const r0 = Math.max(0, Math.floor((south - padY + 90) / CELL_DEG));
-        const r1 = Math.min(ROWS - 1, Math.floor((north + padY + 90) / CELL_DEG));
-
-        let box: CellBox | null = null;
-        for (let c = c0; c <= c1; c++) {
-            for (let r = r0; r <= r1; r++) {
-                if (loadedCells.has(cellKey(c, r))) continue;
-                box = box
-                    ? {
-                          c0: Math.min(box.c0, c),
-                          c1: Math.max(box.c1, c),
-                          r0: Math.min(box.r0, r),
-                          r1: Math.max(box.r1, r),
-                      }
-                    : { c0: c, c1: c, r0: r, r1: r };
-            }
-        }
-        return box;
-    }
-
-    function cellKey(c: number, r: number): string {
-        return `${((c % COLS) + COLS) % COLS}:${r}`;
-    }
-
-    function bboxParam(box: CellBox): string {
-        const lon = (c: number) => (((c % COLS) + COLS) % COLS) * CELL_DEG - 180;
-        const west = box.c1 - box.c0 + 1 >= COLS ? -180 : lon(box.c0);
-        const eastRaw = lon(box.c1 + 1);
-        // lon() lands on [-180, 180); an east edge at -180 is the antimeridian, i.e. 180.
-        const east = box.c1 - box.c0 + 1 >= COLS || eastRaw === -180 ? 180 : eastRaw;
-        const south = box.r0 * CELL_DEG - 90;
-        const north = (box.r1 + 1) * CELL_DEG - 90;
-        return `${west},${south},${east},${north}`;
-    }
-
     function installPolygons(): void {
         if (!polygonSource || !styleReady || map.getSource(POLYGONS_SOURCE)) return;
         const { spec, sourceLayer } = polygonSource;
@@ -438,76 +376,6 @@ export async function addMarkersLayer(
             fillWatched = true;
             markFirstFill(map, sourceLayer);
         }
-    }
-
-    const polygonFC = (): FeatureCollection => ({
-        type: "FeatureCollection",
-        features: [...polygonFeatures.values()],
-    });
-
-    function mergePolygons(features: Feature[]): void {
-        for (const f of features) {
-            if (f.geometry !== null && f.id != null) polygonFeatures.set(f.id, f);
-        }
-        const existing = map.getSource(POLYGONS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
-        if (existing) {
-            existing.setData(polygonFC());
-        } else {
-            polygonSource ??= { spec: () => ({ type: "geojson", data: polygonFC() }) };
-            installPolygons();
-        }
-    }
-
-    async function loadViewPolygons(): Promise<void> {
-        if (!isMapAlive(map)) return;
-        const box = missingCells();
-        if (!box) return;
-        const pending = inflight?.box;
-        if (
-            pending &&
-            box.c0 >= pending.c0 &&
-            box.c1 <= pending.c1 &&
-            box.r0 >= pending.r0 &&
-            box.r1 <= pending.r1
-        )
-            return;
-        inflight?.controller.abort();
-        const controller = new AbortController();
-        inflight = { controller, box };
-        try {
-            const response = await fetch(withQuery(`bbox=${bboxParam(box)}`), {
-                signal: controller.signal,
-            });
-            if (!isMapAlive(map)) return;
-            if (!response.ok) {
-                console.error("Failed to fetch polygon geometries:", response.status);
-                return;
-            }
-            const polygonData: { features?: Feature[] } = await response.json();
-            if (!isMapAlive(map)) return;
-            // Null geometry = too large to ship; those draw on demand as a preview.
-            mergePolygons(polygonData.features ?? []);
-            for (let c = box.c0; c <= box.c1; c++) {
-                for (let r = box.r0; r <= box.r1; r++) loadedCells.add(cellKey(c, r));
-            }
-        } catch (err) {
-            if (controller.signal.aborted) return;
-            console.error("Error fetching polygon geometries:", err);
-        } finally {
-            if (inflight?.controller === controller) inflight = null;
-        }
-    }
-
-    function loadPolygonsByBbox(): void {
-        // Half a step early, so geometry has usually landed by the time fills show.
-        const loadTriggerZoom = POLYGON_STYLE.minZoom - 0.5;
-        const maybeLoadView = () => {
-            clearTimeout(debounceTimer);
-            if (map.getZoom() < loadTriggerZoom) return;
-            debounceTimer = setTimeout(() => void loadViewPolygons(), 250);
-        };
-        map.on("moveend", maybeLoadView);
-        maybeLoadView();
     }
 
     function addPolygonTiles(polygonTiles: PolygonTiles): void {
@@ -556,7 +424,6 @@ export async function addMarkersLayer(
         (tiles) => {
             if (!isMapAlive(map)) return;
             if (tiles) addPolygonTiles(tiles);
-            else loadPolygonsByBbox();
         },
         (err) => console.error("Error loading polygon tiles:", err),
     );

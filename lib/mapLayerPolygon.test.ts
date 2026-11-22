@@ -120,7 +120,7 @@ describe("addMarkersLayer — where the fills come from", () => {
     it.each([
         ["null", Promise.resolve(null)],
         ["absent", undefined],
-    ])("asks ?bbox= when the tiles are %s", async (_, polygonTiles) => {
+    ])("draws no fills and asks nothing when the tiles are %s", async (_, polygonTiles) => {
         const map = fakeMap();
         await addMarkersLayer(map as never, {
             polygonsUrl: "/api/where/polygons",
@@ -130,10 +130,8 @@ describe("addMarkersLayer — where the fills come from", () => {
         await new Promise((r) => setTimeout(r, 300));
         await flush();
 
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(String(fetchMock.mock.calls[0][0])).toMatch(/^\/api\/where\/polygons\?bbox=/);
-        expect(map.sources.get("polygons")?.type).toBe("geojson");
-        expect(map.layers.get("polygons-fill")?.["source-layer"]).toBeUndefined();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(map.sources.has("polygons")).toBe(false);
     });
 });
 
@@ -481,31 +479,6 @@ describe("addMarkersLayer — a basemap switch keeps the pins, fills and preview
         map.switchBasemap();
 
         expect(map.sources.get("large-polygon-preview")?.data).toEqual({ type: "FeatureCollection", features: [large] });
-    });
-
-    it("re-adds the ?bbox= fills already loaded, without asking for their cells again", async () => {
-        const fill = { type: "Feature", id: 9, geometry: { type: "Point", coordinates: [30.5, -6.5] }, properties: {} };
-        fetchMock = vi.fn(async () => new Response(JSON.stringify({ features: [fill] })));
-        vi.stubGlobal("fetch", fetchMock);
-        const map = fakeMap();
-        await addMarkersLayer(map as never, {
-            polygonsUrl: "/api/where/polygons",
-            centroids: Promise.resolve(null),
-        });
-        await new Promise((r) => setTimeout(r, 300));
-        await flush();
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        const handlers = handlerCount(map);
-
-        map.switchBasemap();
-        for (const [type, h, layer] of map.handlers) if (type === "moveend" && !layer) h();
-        await new Promise((r) => setTimeout(r, 300));
-        await flush();
-
-        expect(map.sources.get("polygons")?.data).toEqual({ type: "FeatureCollection", features: [fill] });
-        expect(map.layers.has("polygons-fill")).toBe(true);
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(handlerCount(map)).toBe(handlers);
     });
 
     it("waits for the new style when the pins land mid-switch", async () => {
