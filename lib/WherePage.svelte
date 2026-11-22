@@ -91,7 +91,7 @@ let viewChanged = $state(false);
 
 /** Never `true` on load: it would nag for location permission on every visit. */
 let aroundMeOpen = $state(false);
-/** A bare dog icon says nothing, and the hover tips never show on touch; the callout stays until the tool is used once this visit. */
+/** A bare dog icon says nothing, and the hover tips never show on touch: the button rings until the tool is used once this visit. */
 let aroundHintShown = $state(true);
 let favouritesOpen = $state(false);
 let areaQuery = $state("");
@@ -442,13 +442,6 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 			<img src={toolAroundMe} alt="" />
 			<span class="tool-tip tool-tip-left">{m.wh_around_me()}</span>
 		</button>
-
-		{#if aroundHintShown}
-			<button type="button" class="around-hint" onclick={toggleAroundMe}>
-				<strong>{m.wh_around_me()}</strong>
-				<span>{m.wh_around_me_hint()}</span>
-			</button>
-		{/if}
 
 		{#if viewChanged || selectedFeature}
 			<button
@@ -845,68 +838,6 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 		100% {
 			transform: scale(1.8);
 			opacity: 0;
-		}
-	}
-
-	.around-hint {
-		position: absolute;
-		right: calc(var(--around-right) + var(--around-size) + 14px);
-		bottom: var(--around-bottom);
-		min-height: var(--around-size);
-		z-index: 20;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		align-items: flex-start;
-		gap: 2px;
-		padding: 8px 12px;
-		border: 1px solid #fad702;
-		border-radius: 6px;
-		background: rgba(23, 29, 49, 0.95);
-		color: #fad702;
-		text-align: left;
-		cursor: pointer;
-		-webkit-tap-highlight-color: transparent;
-		animation: around-hint-in 0.5s ease-out 1.2s both;
-	}
-
-	.around-hint::after {
-		content: "";
-		position: absolute;
-		left: 100%;
-		top: 50%;
-		translate: 0 -50%;
-		border: 7px solid transparent;
-		border-left-color: #fad702;
-	}
-
-	.around-hint strong {
-		font-size: 0.8rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-	}
-
-	.around-hint span {
-		font-size: 0.72rem;
-		letter-spacing: 0.03em;
-		color: rgba(250, 215, 2, 0.8);
-		white-space: nowrap;
-	}
-
-	.around-hint:hover,
-	.around-hint:focus-visible {
-		background: rgba(250, 215, 2, 0.18);
-		box-shadow: 0 0 8px rgba(250, 215, 2, 0.55);
-	}
-
-	@keyframes around-hint-in {
-		from {
-			opacity: 0;
-			translate: 8px 0;
-		}
-		to {
-			opacity: 1;
-			translate: 0 0;
 		}
 	}
 
@@ -1458,11 +1389,6 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 			--around-right: 10px;
 			--around-bottom: 14%;
 			--around-size: 48px;
-		}
-
-		.around-hint span {
-			white-space: normal;
-			max-width: 46vw;
 		}
 
 		.tool-tip {
