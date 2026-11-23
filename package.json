@@ -15,7 +15,7 @@
 		"mapbox-gl": "^3.24.0"
 	},
 	"peerDependencies": {
-		"svelte": "^5.57.0"
+		"svelte": "^5.57.3"
 	},
 	"devDependencies": {
 		"@sveltejs/kit": "^3.2.0",
