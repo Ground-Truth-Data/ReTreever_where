@@ -98,7 +98,7 @@ $effect(() => {
 	if (base === pathname && !params.has("land")) return;
 	params.delete("land");
 	const query = params.size ? `?${params}` : "";
-	untrack(() => void goto(`${base}${query}`, { replaceState: true, noScroll: true, keepFocus: true }));
+	untrack(() => void goto(`${base}${query}`, { replace: true, reset: false }));
 });
 
 export function resetView() {

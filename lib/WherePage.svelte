@@ -1,11 +1,11 @@
 <script lang="ts">
 import type { Feature } from "geojson";
-import { page } from "$app/stores";
+import { page } from "$app/state";
 import WhereMap from "./WhereMap.svelte";
 import WhereDrawControls from "./WhereDrawControls.svelte";
 import { defaultStyleOptions } from "./mapControlBaseToggle";
 import { fullMapOptions } from "./MAP_CONFIG";
-import type { WhereView } from "../params/whereView";
+import type { WhereView } from "./landPath";
 import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
 import { featureCoord } from "./coord";
@@ -167,7 +167,7 @@ function pickDrawTool(mode: "polygon") {
 
 function viewHref(target: WhereView): string {
 	const path = view === target ? basePath : `${basePath}/${target}`;
-	return `${localizeHref(path)}${$page.url.search}${$page.url.hash}`;
+	return `${localizeHref(path)}${page.url.search}${page.url.hash}`;
 }
 
 function zoomBy(delta: number) {

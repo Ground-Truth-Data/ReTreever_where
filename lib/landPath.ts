@@ -1,4 +1,6 @@
-import { WHERE_VIEWS } from "../params/whereView";
+// Anything else under /where falls through to its own route or 404s rather than being swallowed.
+export const WHERE_VIEWS = ["orgs", "projects"] as const;
+export type WhereView = (typeof WHERE_VIEWS)[number];
 
 /**
  * A land's address on the map, `<slug>-<id>`. The id alone resolves; the slug is for people, and a
