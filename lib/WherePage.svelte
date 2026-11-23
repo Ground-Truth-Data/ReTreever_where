@@ -367,7 +367,7 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 				class:tool-active={view === "orgs"}
 				href={viewHref("orgs")}
 				aria-current={view === "orgs" ? "page" : undefined}
-				data-sveltekit-noscroll
+				data-sveltekit-reset="false"
 			>
 				<img src={toolPeople} alt="" class="icon-people" />
 				<span class="tool-tip">{m.wh_view_orgs()}</span>
@@ -377,7 +377,7 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 				class:tool-active={view === "projects"}
 				href={viewHref("projects")}
 				aria-current={view === "projects" ? "page" : undefined}
-				data-sveltekit-noscroll
+				data-sveltekit-reset="false"
 			>
 				<img src={toolTree} alt="" class="icon-tree" />
 				<span class="tool-tip">{m.wh_view_projects()}</span>

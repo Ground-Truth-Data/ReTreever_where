@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount, untrack } from "svelte";
-import { goto, replaceState } from "$app/navigation";
+import { goto } from "$app/navigation";
 import "mapbox-gl/dist/mapbox-gl.css";
 import {
 	fullMapOptions,
@@ -119,7 +119,7 @@ export function resetView() {
 		m.off("moveend", stripHash);
 		if (window.location.hash) {
 			// A raw history.replaceState desyncs SvelteKit's history index.
-			replaceState(window.location.pathname + window.location.search, {});
+			goto(window.location.pathname + window.location.search, { shallow: true, replace: true, state: {} });
 		}
 	};
 	m.on("moveend", stripHash);
@@ -243,7 +243,7 @@ onMount(() => {
 			selectedFeature = feature;
 			if (feature?.landSegment) {
 				const path = `${whereBase(window.location.pathname)}/${feature.landSegment}`;
-				replaceState(path, { landTitle: landTitle(feature.landName, feature.projectName) });
+				goto(path, { shallow: true, replace: true, state: { landTitle: landTitle(feature.landName, feature.projectName) } });
 			}
 		};
 
@@ -255,7 +255,7 @@ onMount(() => {
 			enableHash: true,
 			// An open land frames itself, so its link carries no camera.
 			writeHash: (url) => {
-				if (!selectedFeature && !parseLandSegment(window.location.pathname.split("/").pop() ?? "")) replaceState(url, {});
+				if (!selectedFeature && !parseLandSegment(window.location.pathname.split("/").pop() ?? "")) goto(url, { shallow: true, replace: true, state: {} });
 			},
 			...(isMobile && {
 				showDrawTools: false,
