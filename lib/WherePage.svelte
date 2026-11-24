@@ -159,6 +159,9 @@ $effect(() => {
 	};
 });
 
+// A shape shows no area or length yet, so Draw waits for the measure tool (RT 220).
+const drawReady = false;
+
 function pickDrawTool(mode: "polygon") {
 	aroundMeOpen = false;
 	favouritesOpen = false;
@@ -395,10 +398,11 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 				type="button"
 				class="tool-btn"
 				class:tool-active={drawIntent === "polygon"}
-				onclick={() => pickDrawTool("polygon")}
+				aria-disabled={!drawReady}
+				onclick={() => drawReady && pickDrawTool("polygon")}
 			>
 				<img src={toolPolygon} alt="" />
-				<span class="tool-tip">{m.wh_draw_piece()}</span>
+				<span class="tool-tip">{m.wh_draw_soon()}</span>
 			</button>
 			<button type="button" class="tool-btn" onclick={cycleStyle}>
 				<img src={toolMap} alt="" class="icon-map" />
@@ -848,6 +852,22 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 
 	.tool-active img {
 		filter: drop-shadow(0 0 6px #fad702) drop-shadow(0 0 2px #fad702);
+	}
+
+	.tool-btn[aria-disabled="true"] {
+		cursor: not-allowed;
+	}
+
+	.tool-btn[aria-disabled="true"] img,
+	.tool-btn[aria-disabled="true"]:hover img,
+	.tool-btn[aria-disabled="true"]:focus-visible img {
+		filter: grayscale(1);
+		opacity: 0.45;
+	}
+
+	/* A tap never focuses a button on iOS, so the words show while pressed. */
+	.tool-btn[aria-disabled="true"]:active .tool-tip {
+		opacity: 1;
 	}
 
 	.tool-tip {
