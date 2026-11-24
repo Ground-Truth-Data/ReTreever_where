@@ -1,11 +1,11 @@
 <script lang="ts">
 import type { Feature } from "geojson";
-import { page } from "$app/stores";
+import { page } from "$app/state";
 import WhereMap from "./WhereMap.svelte";
 import WhereDrawControls from "./WhereDrawControls.svelte";
 import { defaultStyleOptions } from "./mapControlBaseToggle";
 import { fullMapOptions } from "./MAP_CONFIG";
-import type { WhereView } from "../params/whereView";
+import type { WhereView } from "./landPath";
 import { safeEase } from "./safeEase";
 import { safeFitBounds } from "./safeMap";
 import { featureCoord } from "./coord";
@@ -167,7 +167,7 @@ function pickDrawTool(mode: "polygon") {
 
 function viewHref(target: WhereView): string {
 	const path = view === target ? basePath : `${basePath}/${target}`;
-	return `${localizeHref(path)}${$page.url.search}${$page.url.hash}`;
+	return `${localizeHref(path)}${page.url.search}${page.url.hash}`;
 }
 
 function zoomBy(delta: number) {
@@ -367,7 +367,7 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 				class:tool-active={view === "orgs"}
 				href={viewHref("orgs")}
 				aria-current={view === "orgs" ? "page" : undefined}
-				data-sveltekit-noscroll
+				data-sveltekit-reset="false"
 			>
 				<img src={toolPeople} alt="" class="icon-people" />
 				<span class="tool-tip">{m.wh_view_orgs()}</span>
@@ -377,7 +377,7 @@ let landHref = $derived(selectedFeature?.landSegment ? localizeHref(`${basePath}
 				class:tool-active={view === "projects"}
 				href={viewHref("projects")}
 				aria-current={view === "projects" ? "page" : undefined}
-				data-sveltekit-noscroll
+				data-sveltekit-reset="false"
 			>
 				<img src={toolTree} alt="" class="icon-tree" />
 				<span class="tool-tip">{m.wh_view_projects()}</span>

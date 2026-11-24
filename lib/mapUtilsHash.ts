@@ -23,7 +23,7 @@ export function parseMapHash(
     return { zoom, center: [lng, lat] };
 }
 
-/** A SvelteKit host passes `replaceState` from `$app/navigation`: a raw history write desyncs the router's history index. No framework import here keeps this file unit-testable. */
+/** A SvelteKit host passes a shallow `goto` from `$app/navigation`: a raw history write desyncs the router's history index. No framework import here keeps this file unit-testable. */
 export type HashWriter = (url: string) => void;
 
 const writeWithHistory: HashWriter = (url) => {

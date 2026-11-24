@@ -1,4 +1,4 @@
-import type { Reroute } from "@sveltejs/kit";
+import type { Reroute } from "@sveltejs/kit/hooks";
 
 // ⚠️ Keep DEFAULT in step with this child's defaultPath in the registry — nav and the printed url read that record.
 const SERVED = ["/where/orgs", "/where/projects"];

@@ -1,8 +1,8 @@
 <script lang="ts">
-import { page } from "$app/stores";
+import { page } from "$app/state";
 import WherePage from "../../lib/WherePage.svelte";
 import type { Centroids, FavouriteLocation, WhereRoutes } from "../../lib/whereTypes";
-import type { WhereView } from "../../params/whereView";
+import type { WhereView } from "../../lib/landPath";
 import type { Feature } from "geojson";
 import type { Snippet } from "svelte";
 
@@ -23,7 +23,7 @@ let {
 	children,
 }: { hostProps?: HostProps; children?: Snippet } = $props();
 
-let view = $derived(($page.params.view as WhereView | undefined) ?? null);
+let view = $derived((page.params.view as WhereView | undefined) ?? null);
 
 // In memory only: a child owns no storage.
 let favourites = $state<FavouriteLocation[]>([]);
