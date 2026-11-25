@@ -10,7 +10,6 @@ export const MAP_CONFIG = {
     },
     styles: {
         defaultSat: "mapbox://styles/mapbox/satellite-streets-v12",
-        defaultDark: "mapbox://styles/mapbox/dark-v11",
     },
     cluster: {
         maxZoom: 14,
