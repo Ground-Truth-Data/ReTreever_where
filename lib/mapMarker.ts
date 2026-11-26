@@ -14,6 +14,51 @@ const MAX_LOOP_MS = 8000;
 
 let lastDroppedCount = 0;
 
+const WAG_SPEEDS = [0.65, 0.85, 1, 1.2, 1.5];
+export const WAG_VARIANT_COUNT = WAG_SPEEDS.length;
+
+// Keyed on place, not the pin number: a pin's number changes between builds, its place does not.
+export function wagVariantOf(coordinates: readonly number[]): number {
+    const key = coordinates.join(",");
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+    return (h >>> 0) % WAG_VARIANT_COUNT;
+}
+
+export function withWagVariants(
+    fc: FeatureCollection<Geometry, GeoJsonProperties>,
+): FeatureCollection<Geometry, GeoJsonProperties> {
+    return {
+        ...fc,
+        features: fc.features.map((f) =>
+            f.geometry?.type === "Point"
+                ? { ...f, properties: { ...f.properties, wag: wagVariantOf(f.geometry.coordinates) } }
+                : f,
+        ),
+    };
+}
+
+/** One clock per variant over the shared frames; the start offset keeps same-speed dogs out of step. */
+export function wagClocks(
+    frameMs: number,
+    frameCount: number,
+): { frameMs: number; startFrame: number }[] {
+    return WAG_SPEEDS.map((speed, i) => ({
+        frameMs: frameMs / speed,
+        startFrame: Math.floor(((i * 2) % WAG_VARIANT_COUNT) * (frameCount / WAG_VARIANT_COUNT)),
+    }));
+}
+
+export function wagFrameAt(
+    clock: { frameMs: number; startFrame: number },
+    elapsedMs: number,
+    frameCount: number,
+): number {
+    return (clock.startFrame + Math.floor(elapsedMs / clock.frameMs)) % frameCount;
+}
+
+const wagIconId = (sourceId: string, variant: number) => `${sourceId}-dog-${variant}`;
+
 // One NaN Point in a clustered source crashes mapbox mid-render with a stack that never names the feature.
 function filterFiniteFeatures(
     fc: FeatureCollection<Geometry, GeoJsonProperties>,
@@ -295,20 +340,21 @@ async function rasterizeSvgFrames(
     }
 }
 
-// One rAF loop per icon id, phase-locked to paint; every dog shares the icon.
-function startIconAnimation(
+// One rAF loop for every variant, stepped on the bake's clock: five free-running loops repaint the map every display frame.
+function startWagAnimation(
     map: mapboxgl.Map,
-    iconId: string,
+    iconIds: string[],
     frames: ImageData[],
     frameMs: number,
 ): void {
     const mapRecord = map as unknown as Record<string, unknown>;
-    const timerKey = `__iconAnimTimer:${iconId}`;
+    const timerKey = `__iconAnimTimer:${iconIds[0]}`;
     if (mapRecord[timerKey]) return;
 
-    const loopMs = frameMs * frames.length;
+    const clocks = wagClocks(frameMs, frames.length);
+    const shown = iconIds.map(() => -1);
     let startedAt: number | null = null;
-    let lastFrame = -1;
+    let lastStep = -1;
     let raf = 0;
 
     const tick = (now: number): void => {
@@ -317,23 +363,23 @@ function startIconAnimation(
             delete mapRecord[timerKey];
             return;
         }
-        // A style swap drops the sprite atlas for a few frames; that is transient, not terminal.
-        if (!map.hasImage(iconId)) {
-            raf = requestAnimationFrame(tick);
-            return;
-        }
-        startedAt ??= now;
-        const frame = Math.min(
-            frames.length - 1,
-            Math.floor(((now - startedAt) % loopMs) / frameMs),
-        );
-        if (frame !== lastFrame) {
-            lastFrame = frame;
-            map.updateImage(iconId, frames[frame]);
-            // updateImage never schedules a render; on an idle map the pose would never upload.
-            map.triggerRepaint();
-        }
         raf = requestAnimationFrame(tick);
+        startedAt ??= now;
+        const step = Math.floor((now - startedAt) / frameMs);
+        if (step === lastStep) return;
+        lastStep = step;
+        let changed = false;
+        iconIds.forEach((iconId, v) => {
+            // A style swap drops the sprite atlas for a few frames; that is transient, not terminal.
+            if (!map.hasImage(iconId)) return;
+            const frame = wagFrameAt(clocks[v], step * frameMs, frames.length);
+            if (frame === shown[v]) return;
+            shown[v] = frame;
+            map.updateImage(iconId, frames[frame]);
+            changed = true;
+        });
+        // updateImage never schedules a render; on an idle map the pose would never upload.
+        if (changed) map.triggerRepaint();
     };
 
     raf = requestAnimationFrame(tick);
@@ -360,7 +406,7 @@ function whenMapSettled(map: mapboxgl.Map, run: () => void): void {
 
 async function wagWhenBaked(
     map: mapboxgl.Map,
-    iconId: string,
+    sourceId: string,
     markerSvg: string,
     sizePx: number,
 ): Promise<void> {
@@ -373,7 +419,12 @@ async function wagWhenBaked(
         return;
     }
     if (!isMapAlive(map) || baked.frames.length < 2) return;
-    startIconAnimation(map, iconId, baked.frames, baked.frameMs);
+    startWagAnimation(
+        map,
+        WAG_SPEEDS.map((_, v) => wagIconId(sourceId, v)),
+        baked.frames,
+        baked.frameMs,
+    );
 }
 
 async function addDogLayer(
@@ -382,22 +433,22 @@ async function addDogLayer(
     markerSvg: string,
     onPointClick?: (feature: mapboxgl.MapboxGeoJSONFeature) => void,
 ): Promise<void> {
-    const iconId = `${sourceId}-dog`;
+    const iconIds = WAG_SPEEDS.map((_, v) => wagIconId(sourceId, v));
     const layerId = `${sourceId}-dogs`;
     const mapRecord = map as unknown as Record<string, unknown>;
 
-    if (!map.hasImage(iconId)) {
+    if (iconIds.some((id) => !map.hasImage(id))) {
         const sizePx = MAP_CONFIG.marker.iconPixelSize;
         const still = await rasterizeSvg(markerSvg, sizePx);
         if (!isMapAlive(map)) return;
-        if (!map.hasImage(iconId)) {
-            map.addImage(iconId, still, { pixelRatio: 2 });
-            // A basemap switch drops the image but not the running wag; bake its frames once.
-            const bakeKey = `__iconBake:${iconId}`;
-            if (!mapRecord[bakeKey]) {
-                mapRecord[bakeKey] = true;
-                whenMapSettled(map, () => void wagWhenBaked(map, iconId, markerSvg, sizePx));
-            }
+        for (const id of iconIds) {
+            if (!map.hasImage(id)) map.addImage(id, still, { pixelRatio: 2 });
+        }
+        // A basemap switch drops the images but not the running wags; bake the frames once.
+        const bakeKey = `__iconBake:${sourceId}`;
+        if (!mapRecord[bakeKey]) {
+            mapRecord[bakeKey] = true;
+            whenMapSettled(map, () => void wagWhenBaked(map, sourceId, markerSvg, sizePx));
         }
     }
 
@@ -411,7 +462,11 @@ async function addDogLayer(
             source: sourceId,
             filter: ["!", ["has", "point_count"]],
             layout: {
-                "icon-image": iconId,
+                "icon-image": [
+                    "concat",
+                    `${sourceId}-dog-`,
+                    ["to-string", ["coalesce", ["get", "wag"], 0]],
+                ],
                 "icon-size": [
                     "interpolate",
                     ["linear"],
@@ -463,7 +518,7 @@ export function addClusteredPins(
         clusterRadius = MAP_CONFIG.cluster.radius,
     } = config;
     const mapRecord = map as unknown as Record<string, unknown>;
-    const safeData = filterFiniteFeatures(data);
+    const safeData = withWagVariants(filterFiniteFeatures(data));
 
     const existing = map.getSource(id) as mapboxgl.GeoJSONSource | undefined;
     if (existing) {
